@@ -11,7 +11,6 @@ from ConfigSpace.conditions import InCondition
 from smac.scenario.scenario import Scenario
 from smac.facade.smac_facade import SMAC
 from sklearn.model_selection import cross_val_score
-from sklearn.ensemble.forest import RandomForestClassifier
 import importlib
 
 class JPLSMAC(object):
@@ -139,7 +138,7 @@ class JPLSMAC(object):
     def primitive_from_cfg(self, cfg):
         """
         Creates a Primitive based on a configuration and evaluates it on the
-        iris-dataset using cross-validation.
+        given dataset using cross-validation.
         Parameters:
         -----------
         cfg: Configuration (ConfigSpace.ConfigurationSpace.Configuration)
@@ -194,22 +193,9 @@ class JPLSMAC(object):
 
         return inc_value
 
-# import logging
-# logging.basicConfig(level=logging.INFO)
-#
-# rng = np.random.RandomState(0)
-# iris = datasets.load_iris()
-# perm = rng.permutation(iris.target.size)
-# iris.data, iris.target = shuffle(iris.data, iris.target, random_state=rng)
-# primitive_class = index.get_primitive('d3m.primitives.classification.random_forest.SKlearn')
-# smac = JPLSMAC(primitive_class, iris.data, iris.target)
-# smac.optimization()
-
 # need to make a utils file with basic things list lower, upper
 # need to now work with the validation code that they have and whatever else
 # need to check the other functions SMAC has
 # fix overlay files, d3m issue
 # need to fix the default in union, it is wrong bc i am not setting the choices default but configuration wont give it to me, self.default_hyperparameter configuration[default]
-#need to get rid of use_sematic types, add_index etc in configuration
-            #can ignore if semantuc type is control
 # move onto GRIDSEARCH

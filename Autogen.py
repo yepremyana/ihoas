@@ -1,10 +1,4 @@
-# need to autogenerate a few things
-# add validation
-# need to use different sklearn function
-    # - i could mke a csv with the import stuff i guess, also look at generate_example code
-
 import numpy as np
-import importlib
 from sklearn import datasets
 from sklearn.utils import shuffle
 from d3m import index
