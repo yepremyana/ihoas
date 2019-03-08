@@ -1,8 +1,5 @@
-from sklearn import datasets
-from sklearn.utils import shuffle
 import numpy as np
 import d3m.metadata.hyperparams as hyperparams
-from d3m import index, utils
 import ConfigSpace as CS
 from ConfigSpace.hyperparameters import UniformIntegerHyperparameter, \
     UnParametrizedHyperparameter, Constant, CategoricalHyperparameter, \
@@ -55,7 +52,7 @@ class JPLSMAC(object):
             if default_hp == 0:
                 upper = 10
             else:
-                upper = 2 * (hp_value.get_default())
+                upper = 2 * (default_hp)
         else:
             upper = hp_value.upper
         structure_type = hp_value.structural_type
@@ -196,6 +193,6 @@ class JPLSMAC(object):
 # need to make a utils file with basic things list lower, upper
 # need to now work with the validation code that they have and whatever else
 # need to check the other functions SMAC has
-# fix overlay files, d3m issue
+# fix overlay files, d3m issue, fix hyperparameter type parameters
 # need to fix the default in union, it is wrong bc i am not setting the choices default but configuration wont give it to me, self.default_hyperparameter configuration[default]
 # move onto GRIDSEARCH
