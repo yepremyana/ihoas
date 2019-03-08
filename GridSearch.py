@@ -1,0 +1,115 @@
+import numpy as np
+import d3m.metadata.hyperparams as hyperparams
+from sklearn import datasets
+from sklearn.utils import shuffle
+from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import cross_val_score
+from sklearn.metrics import classification_report
+from d3m import index
+
+from sklearn.ensemble.forest import RandomForestClassifier
+class JPLGridSearch(object):
+    def __init__(self, primitive_class, data, target) -> None:
+        self.primitive_class = primitive_class
+        self.data = data
+        self.target = target
+        self.parameters = {}
+        # primitive_json = primitive_class.metadata.query().get('name')
+        # import_module = ".".join(primitive_json.split(".")[:-1])
+        # sklearn_module = importlib.import_module(import_module)
+        # import_class = primitive_json.split(".")[-1]
+        # self.sklearn_class = getattr(sklearn_module, import_class)
+
+    def _enumeration_to_config_space(self, name, hp_value):
+        default_hp = hp_value.get_default()
+        values = hp_value.values
+        params_config = values
+
+        return params_config
+
+    def _constant_to_config_space(self, name, hp_value):
+        default_hp = hp_value.get_default()
+        params_config = [default_hp]
+        return params_config
+
+    def _bounded_to_config_space(self, name, hp_value):
+        lower, default_hp = hp_value.lower, hp_value.get_default()
+        if hp_value.upper == None:
+            if default_hp == 0:
+                upper = 10
+            else:
+                upper = 2 * (default_hp)
+
+        else:
+            upper = hp_value.upper
+
+        structure_type = hp_value.structural_type
+
+        if issubclass(structure_type, float):
+            params_config = np.linspace(lower, upper, num=(2*upper), endpoint=True)
+        elif issubclass(structure_type, int):
+            params_config = np.linspace(lower, upper, num=((upper-lower) + 1), dtype=np.int16, endpoint=True)
+
+        return params_config
+
+    def _union_to_config_space(self, name, hp_value):
+        values_union = []
+        for union_name, union_hp_value in hp_value.configuration.items():
+            if isinstance(union_hp_value, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
+                child = self._bounded_to_config_space(union_name, union_hp_value)
+            elif isinstance(union_hp_value, (hyperparams.Enumeration, hyperparams.UniformBool)):
+                child = self._enumeration_to_config_space(union_name, union_hp_value)
+            elif isinstance(union_hp_value, (hyperparams.Constant)):
+                child = self._constant_to_config_space(union_name, union_hp_value)
+            values_union.extend(child)
+        return values_union
+
+    # def _choice_to_config_space(self, name, hp_value):
+    #     for choice, hyperparameter in hp_value.choices.items():
+    #         if type != 'choice':
+    #             values_union = self._union_to_config_space(choice, hyperparameter)
+
+    def _get_hp_search_space(self):
+        hyperparameters = self.primitive_class.metadata.query()['primitive_code']['hyperparams']
+        configuration = self.primitive_class.metadata.query()['primitive_code']['class_type_arguments']['Hyperparams'].configuration
+        for name, description in hyperparameters.items():
+            hp_value = configuration[name]
+            if description['semantic_types'][0] == 'https://metadata.datadrivendiscovery.org/types/ControlParameter':
+                continue
+            elif isinstance(hp_value, (hyperparams.Enumeration, hyperparams.UniformBool)):
+                params_config = self._enumeration_to_config_space(name, hp_value)
+                self.parameters[name] = params_config
+            elif isinstance(hp_value, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
+                params_config = self._bounded_to_config_space(name, hp_value)
+                self.parameters[name] = params_config
+            elif isinstance(hp_value, (hyperparams.Union)):
+                params_config = self._union_to_config_space(name, hp_value)
+                self.parameters[name] = params_config
+            # elif isinstance(hp_value, (hyperparams.Choice)):
+            #     params_config = self._choice_to_config_space(name, hp_value)
+            #     self.parameters[name] = params_config
+            elif isinstance(hp_value, (hyperparams.Constant)):
+                params_config = self._constant_to_config_space(name, hp_value)
+                self.parameters[name] = params_config
+        return
+
+    def optimization(self):
+        self._get_hp_search_space()
+        print(self.parameters)
+        clf = GridSearchCV(RandomForestClassifier(), self.parameters, cv=5)
+        #error_score = 0.0
+        clf.fit(iris.data, iris.target)
+        print(sorted(clf.cv_results_['mean_test_score']))
+        y_pred = clf.predict(iris.data)
+        print(y_pred)
+        print('The parameters combination that would give best accuracy is : ')
+        print(clf.best_params_)
+        print('The best accuracy achieved after parameter tuning via grid search is : ', clf.best_score_)
+
+rng = np.random.RandomState(0)
+iris = datasets.load_iris()
+perm = rng.permutation(iris.target.size)
+iris.data, iris.target = shuffle(iris.data, iris.target, random_state=rng)
+primitive_class = index.get_primitive('d3m.primitives.classification.random_forest.SKlearn')
+smac = JPLGridSearch(primitive_class, iris.data, iris.target)
+smac.optimization()
