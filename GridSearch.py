@@ -1,24 +1,22 @@
 import numpy as np
 import d3m.metadata.hyperparams as hyperparams
-from sklearn import datasets
-from sklearn.utils import shuffle
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import classification_report
-from d3m import index
+import importlib
 
-from sklearn.ensemble.forest import RandomForestClassifier
 class JPLGridSearch(object):
     def __init__(self, primitive_class, data, target) -> None:
         self.primitive_class = primitive_class
         self.data = data
         self.target = target
         self.parameters = {}
-        # primitive_json = primitive_class.metadata.query().get('name')
-        # import_module = ".".join(primitive_json.split(".")[:-1])
-        # sklearn_module = importlib.import_module(import_module)
-        # import_class = primitive_json.split(".")[-1]
-        # self.sklearn_class = getattr(sklearn_module, import_class)
+
+        primitive_json = primitive_class.metadata.query().get('name')
+        import_module = ".".join(primitive_json.split(".")[:-1])
+        sklearn_module = importlib.import_module(import_module)
+        import_class = primitive_json.split(".")[-1]
+        self.sklearn_class = getattr(sklearn_module, import_class)
 
     def _enumeration_to_config_space(self, name, hp_value):
         params_config = hp_value.values
@@ -117,20 +115,11 @@ class JPLGridSearch(object):
         return param_grid
     def optimization(self):
         param_grid = self._get_hp_search_space()
-        clf = GridSearchCV(RandomForestClassifier(), param_grid, cv=5)
-        #error_score = 0.0
-        clf.fit(iris.data, iris.target)
+        clf = GridSearchCV(self.sklearn_class(), param_grid, cv=5)
+        clf.fit(self.data, self.target)
         print(sorted(clf.cv_results_['mean_test_score']))
-        y_pred = clf.predict(iris.data)
+        y_pred = clf.predict(self.data)
         print(y_pred)
         print('The parameters combination that would give best accuracy is : ')
         print(clf.best_params_)
         print('The best accuracy achieved after parameter tuning via grid search is : ', clf.best_score_)
-
-rng = np.random.RandomState(0)
-iris = datasets.load_iris()
-perm = rng.permutation(iris.target.size)
-iris.data, iris.target = shuffle(iris.data, iris.target, random_state=rng)
-primitive_class = index.get_primitive('d3m.primitives.classification.random_forest.SKlearn')
-smac = JPLGridSearch(primitive_class, iris.data, iris.target)
-smac.optimization()
