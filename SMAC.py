@@ -195,4 +195,3 @@ class JPLSMAC(object):
 # need to check the other functions SMAC has
 # fix overlay files, d3m issue, fix hyperparameter type parameters
 # need to fix the default in union, it is wrong bc i am not setting the choices default but configuration wont give it to me, self.default_hyperparameter configuration[default]
-# move onto GRIDSEARCH
