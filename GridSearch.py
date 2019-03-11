@@ -81,6 +81,7 @@ class JPLGridSearch(object):
     def _get_hp_search_space(self):
         hyperparameters = self.primitive_class.metadata.query()['primitive_code']['hyperparams']
         configuration = self.primitive_class.metadata.query()['primitive_code']['class_type_arguments']['Hyperparams'].configuration
+        choice_used = False
         for name, description in hyperparameters.items():
             hp_value = configuration[name]
             if description['semantic_types'][0] == 'https://metadata.datadrivendiscovery.org/types/ControlParameter':
@@ -95,11 +96,15 @@ class JPLGridSearch(object):
                 params_config = self._union_to_config_space(name, hp_value)
                 self.parameters[name] = params_config
             elif isinstance(hp_value, (hyperparams.Choice)):
+                choice_used = True
                 choice_combo = self._choice_to_config_space(name, hp_value)
             elif isinstance(hp_value, (hyperparams.Constant)):
                 params_config = self._constant_to_config_space(name, hp_value)
                 self.parameters[name] = params_config
-        param_grid = self._param_grid(choice_combo)
+
+        param_grid = self.parameters
+        if choice_used:
+            param_grid = self._param_grid(choice_combo)
 
         return param_grid
 
@@ -112,7 +117,6 @@ class JPLGridSearch(object):
         return param_grid
     def optimization(self):
         param_grid = self._get_hp_search_space()
-        print(param_grid)
         clf = GridSearchCV(RandomForestClassifier(), param_grid, cv=5)
         #error_score = 0.0
         clf.fit(iris.data, iris.target)
