@@ -21,9 +21,7 @@ class JPLGridSearch(object):
         # self.sklearn_class = getattr(sklearn_module, import_class)
 
     def _enumeration_to_config_space(self, name, hp_value):
-        default_hp = hp_value.get_default()
-        values = hp_value.values
-        params_config = values
+        params_config = hp_value.values
 
         return params_config
 
@@ -64,10 +62,21 @@ class JPLGridSearch(object):
             values_union.extend(child)
         return values_union
 
-    # def _choice_to_config_space(self, name, hp_value):
-    #     for choice, hyperparameter in hp_value.choices.items():
-    #         if type != 'choice':
-    #             values_union = self._union_to_config_space(choice, hyperparameter)
+    def _choice_to_config_space(self, name, hp_value):
+        choice_combo = []
+        for choice, hyperparameter in hp_value.choices.items():
+            choice_dict = {}
+            choice_dict[name] = [choice]
+            for type, hp_info in hyperparameter.configuration.items():
+                if type != 'choice':
+                    if isinstance(hp_info, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
+                        values_union = self._bounded_to_config_space(type, hp_info)
+                        choice_dict[type] =values_union
+                    elif isinstance(hp_info, (hyperparams.Union)):
+                        values_union = self._union_to_config_space(type, hp_info)
+                        choice_dict[type] = values_union
+            choice_combo.append(choice_dict)
+        return choice_combo
 
     def _get_hp_search_space(self):
         hyperparameters = self.primitive_class.metadata.query()['primitive_code']['hyperparams']
@@ -85,18 +94,26 @@ class JPLGridSearch(object):
             elif isinstance(hp_value, (hyperparams.Union)):
                 params_config = self._union_to_config_space(name, hp_value)
                 self.parameters[name] = params_config
-            # elif isinstance(hp_value, (hyperparams.Choice)):
-            #     params_config = self._choice_to_config_space(name, hp_value)
-            #     self.parameters[name] = params_config
+            elif isinstance(hp_value, (hyperparams.Choice)):
+                choice_combo = self._choice_to_config_space(name, hp_value)
             elif isinstance(hp_value, (hyperparams.Constant)):
                 params_config = self._constant_to_config_space(name, hp_value)
                 self.parameters[name] = params_config
-        return
+        param_grid = self._param_grid(choice_combo)
 
+        return param_grid
+
+    def _param_grid(self,  choice_combo):
+        param_grid = []
+        for item in choice_combo:
+            item.update(self.parameters)
+            param_grid.append(item)
+
+        return param_grid
     def optimization(self):
-        self._get_hp_search_space()
-        print(self.parameters)
-        clf = GridSearchCV(RandomForestClassifier(), self.parameters, cv=5)
+        param_grid = self._get_hp_search_space()
+        print(param_grid)
+        clf = GridSearchCV(RandomForestClassifier(), param_grid, cv=5)
         #error_score = 0.0
         clf.fit(iris.data, iris.target)
         print(sorted(clf.cv_results_['mean_test_score']))
