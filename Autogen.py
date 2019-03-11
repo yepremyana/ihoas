@@ -3,6 +3,7 @@ from sklearn import datasets
 from sklearn.utils import shuffle
 from d3m import index
 from SMAC import JPLSMAC
+from GridSearch import JPLGridSearch
 import logging
 logging.basicConfig(level=logging.INFO)
 
@@ -15,10 +16,12 @@ def loop_through():
     all_primitives = index.search()
     for primitive in all_primitives:
         #if "SKlearn" in primitive:
-        if "random_forest.SKlearn" in primitive:
+        if "classification.random_forest.SKlearn" in primitive:
             primitive_obj = index.get_primitive(primitive)
             smac = JPLSMAC(primitive_obj, iris.data, iris.target)
             smac.optimization()
+            grid_search = JPLGridSearch(primitive_obj, iris.data, iris.target)
+            grid_search.optimization()
 
 if __name__ == "__main__":
     """
