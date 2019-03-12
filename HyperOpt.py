@@ -7,9 +7,11 @@ from sklearn.ensemble.forest import RandomForestClassifier
 from d3m import index
 import d3m.metadata.hyperparams as hyperparams
 from hyperopt import hp
+from hyperopt.pyll.stochastic import sample
 from hyperopt import tpe
 from hyperopt import fmin
 from hyperopt import Trials
+from hyperopt.pyll import scope
 import importlib
 
 class JPLHyperOpt(object):
@@ -24,8 +26,55 @@ class JPLHyperOpt(object):
 
     def _enumeration_to_config_space(self, name, hp_value):
         values = hp_value.values
-        self.parameters[name] = hp.choice(name, values)
-        return
+        params_config = hp.choice(name, values)
+        return params_config
+
+    def _constant_to_config_space(self, name, hp_value):
+        default_hp = hp_value.get_default()
+        return default_hp
+
+    def _bounded_to_config_space(self, name, hp_value):
+        lower, default_hp = hp_value.lower, hp_value.get_default()
+        if hp_value.upper == None:
+            if default_hp == 0:
+                upper = 10
+            else:
+                upper = 2 * (default_hp)
+        else:
+            upper = hp_value.upper
+        structure_type = hp_value.structural_type
+
+        if issubclass(structure_type, float):
+            params_config = hp.uniform(name, lower, upper)
+
+        elif issubclass(structure_type, int):
+            params_config = scope.int(hp.quniform(name, lower, upper, 1))
+
+        return params_config
+
+    def _union_to_config_space(self, name, hp_value):
+        values_union = []
+        for union_name, union_hp_value in hp_value.configuration.items():
+            if isinstance(union_hp_value, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
+                child = self._bounded_to_config_space(union_name, union_hp_value)
+            elif isinstance(union_hp_value, (hyperparams.Enumeration, hyperparams.UniformBool)):
+                child = self._enumeration_to_config_space(union_name, union_hp_value)
+            elif isinstance(union_hp_value, (hyperparams.Constant)):
+                child = self._constant_to_config_space(union_name, union_hp_value)
+            values_union.append(child)
+        return values_union
+
+    # def _choice_to_config_space(self, name, hp_value):
+    #     values_union = []
+    #     for union_name, union_hp_value in hp_value.configuration.items():
+    #         if isinstance(union_hp_value, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
+    #             child = self._bounded_to_config_space(union_name, union_hp_value)
+    #         elif isinstance(union_hp_value, (hyperparams.Enumeration, hyperparams.UniformBool)):
+    #             child = self._enumeration_to_config_space(union_name, union_hp_value)
+    #         elif isinstance(union_hp_value, (hyperparams.Constant)):
+    #             child = self._constant_to_config_space(union_name, union_hp_value)
+    #         values_union.append((union_name, child))
+    #     return values_union
 
     def _get_hp_search_space(self):
         hyperparameters = self.primitive_class.metadata.query()['primitive_code']['hyperparams']
@@ -35,8 +84,17 @@ class JPLHyperOpt(object):
             if description['semantic_types'][0] == 'https://metadata.datadrivendiscovery.org/types/ControlParameter':
                 continue
             elif isinstance(hp_value, (hyperparams.Enumeration, hyperparams.UniformBool)):
-                self._enumeration_to_config_space(name, hp_value)
-
+                params_config = self._enumeration_to_config_space(name, hp_value)
+                self.parameters[name] = params_config
+            elif isinstance(hp_value, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
+                params_config = self._bounded_to_config_space(name, hp_value)
+                self.parameters[name] = params_config
+            elif isinstance(hp_value, (hyperparams.Union)):
+                params_config = self._union_to_config_space(name, hp_value)
+                self.parameters[name] = hp.choice(name, params_config)
+            elif isinstance(hp_value, (hyperparams.Constant)):
+                params_config = self._constant_to_config_space(name, hp_value)
+                self.parameters[name] = params_config
         return
             # Define the search space
         #     space = {
@@ -56,7 +114,7 @@ class JPLHyperOpt(object):
         #         'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0)
         #     }
     def objective(self, args):
-
+        print(args)
         clf = RandomForestClassifier(**args, random_state=42)
 
         scores = cross_val_score(clf, self.data, self.target, cv=5)
@@ -82,14 +140,16 @@ class JPLHyperOpt(object):
         # Trials object to track progress
         bayes_trials = Trials()
         MAX_EVALS = 500
+        print(self.parameters)
+        print(sample(self.parameters))
 
         # Optimize
         best = fmin(fn=self.objective, space=self.parameters, algo=tpe.suggest,
                     max_evals=MAX_EVALS, trials=bayes_trials, rstate = np.random.RandomState(52))
-
+        print(best)
         # Sort the trials with lowest loss first
         bayes_trials_results = sorted(bayes_trials.results, key=lambda x: x['loss'])
-        bayes_trials_results[:2]
+        print(bayes_trials_results[:2])
         return
 
 rng = np.random.RandomState(0)
