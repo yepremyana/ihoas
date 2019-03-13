@@ -24,6 +24,7 @@ class JPLHyperOpt(object):
         self.data = data
         self.target = target
         self.parameters = {}
+        self.choice_names = []
 
     def _enumeration_to_config_space(self, name, hp_value):
         values = hp_value.values
@@ -34,7 +35,7 @@ class JPLHyperOpt(object):
         default_hp = hp_value.get_default()
         return default_hp
 
-    def _bounded_to_config_space(self, name, hp_value, choice = None):
+    def _bounded_to_config_space(self, name, hp_value):
         lower, default_hp = hp_value.lower, hp_value.get_default()
         if hp_value.upper == None:
             if default_hp == 0:
@@ -44,9 +45,6 @@ class JPLHyperOpt(object):
         else:
             upper = hp_value.upper
         structure_type = hp_value.structural_type
-
-        if choice:
-            name = "{}_{}".format(choice, name)
 
         if issubclass(structure_type, float):
             params_config = hp.uniform(name, lower, upper)
@@ -75,27 +73,20 @@ class JPLHyperOpt(object):
             choice_dict[name] = choice
             for type, hp_info in hyperparameter.configuration.items():
                 if type != 'choice':
+                    label = "{}_{}".format(choice, type)
                     if isinstance(hp_info, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
-                        values_union = self._bounded_to_config_space(type, hp_info, choice)
+                        values_union = self._bounded_to_config_space(label, hp_info)
                         choice_dict[type] = values_union
-                    elif isinstance(hp_value, (hyperparams.Constant)):
-                        values_union = self._constant_to_config_space(name, hp_value)
+                    elif isinstance(hp_info, (hyperparams.Constant)):
+                        values_union = self._constant_to_config_space(label, hp_info)
                         choice_dict[type] = values_union
                     elif isinstance(hp_info, (hyperparams.Union)):
-                        values_union = self._union_to_config_space(type, hp_info)
+                        values_union = self._union_to_config_space(label, hp_info)
                         choice_dict[type] = values_union
             choice_combo.append(choice_dict)
 
         print(choice_combo)
         return choice_combo
-
-    # boosting_type = {'boosting_type': hp.choice('boosting_type',
-    #                                             [{'boosting_type': 'gbdt',
-    #                                               'subsample': hp.uniform('subsample', 0.5, 1)},
-    #                                              {'boosting_type': 'dart',
-    #                                               'subsample': hp.uniform('subsample', 0.5, 1)},
-    #                                              {'boosting_type': 'goss',
-    #                                               'subsample': 1.0}])}
 
     def _get_hp_search_space(self):
         hyperparameters = self.primitive_class.metadata.query()['primitive_code']['hyperparams']
@@ -116,34 +107,15 @@ class JPLHyperOpt(object):
             elif isinstance(hp_value, (hyperparams.Choice)):
                 params_config = self._choice_to_config_space(name, hp_value)
                 self.parameters[name] = hp.choice(name, params_config)
+                self.choice_names.append(name)
             elif isinstance(hp_value, (hyperparams.Constant)):
                 params_config = self._constant_to_config_space(name, hp_value)
                 self.parameters[name] = params_config
         return
-            # Define the search space
-        #     space = {
-        #         'class_weight': hp.choice('class_weight', [None, 'balanced']),
-        #         'boosting_type': hp.choice('boosting_type',
-        #                                    [{'boosting_type': 'gbdt',
-        #                                      'subsample': hp.uniform('gdbt_subsample', 0.5, 1)},
-        #                                     {'boosting_type': 'dart',
-        #                                      'subsample': hp.uniform('dart_subsample', 0.5, 1)},
-        #                                     {'boosting_type': 'goss'}]),
-        #         'num_leaves': hp.quniform('num_leaves', 30, 150, 1),
-        #         'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(0.2)),
-        #         'subsample_for_bin': hp.quniform('subsample_for_bin', 20000, 300000, 20000),
-        #         'min_child_samples': hp.quniform('min_child_samples', 20, 500, 5),
-        #         'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
-        #         'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
-        #         'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0)
-        #     }
+
     def objective(self, args):
 
-        #make this a function
-        #get rid of none
-        subsample = args['kernel'].get('degree')
-        args['kernel'] = args['kernel']['kernel']
-        args['degree'] = subsample
+        args = self._translate_union_value(self.choice_names, args)
         print(args)
         # clf = RandomForestClassifier(**args, random_state=42)
         clf = SVR(**args)
@@ -166,11 +138,22 @@ class JPLHyperOpt(object):
         #     for train_index, valid_index in cv_iter:
         #         loss = 1 - r2_score(cv_y_pool, cv_pred_pool)
 
+    def _translate_union_value(self, choice_list, args):
+        # We translate Choice values:
+        for item in choice_list:
+            for key in args[item]:
+                if key != item:
+                    args[key] = args[item][key]
+                else:
+                    continue
+            args[item] = args[item][item]
+        return args
+
     def optimization(self):
         self._get_hp_search_space()
         # Trials object to track progress
         bayes_trials = Trials()
-        MAX_EVALS = 6
+        MAX_EVALS = 5
         print(self.parameters)
         print(sample(self.parameters))
 
