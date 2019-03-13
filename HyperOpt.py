@@ -4,6 +4,7 @@ from sklearn.utils import shuffle
 from sklearn.metrics import accuracy_score, r2_score
 from sklearn.model_selection import cross_val_score
 from sklearn.ensemble.forest import RandomForestClassifier
+from sklearn.svm.classes import SVR
 from d3m import index
 import d3m.metadata.hyperparams as hyperparams
 from hyperopt import hp
@@ -33,7 +34,7 @@ class JPLHyperOpt(object):
         default_hp = hp_value.get_default()
         return default_hp
 
-    def _bounded_to_config_space(self, name, hp_value):
+    def _bounded_to_config_space(self, name, hp_value, choice = None):
         lower, default_hp = hp_value.lower, hp_value.get_default()
         if hp_value.upper == None:
             if default_hp == 0:
@@ -43,6 +44,9 @@ class JPLHyperOpt(object):
         else:
             upper = hp_value.upper
         structure_type = hp_value.structural_type
+
+        if choice:
+            name = "{}_{}".format(choice, name)
 
         if issubclass(structure_type, float):
             params_config = hp.uniform(name, lower, upper)
@@ -64,17 +68,34 @@ class JPLHyperOpt(object):
             values_union.append(child)
         return values_union
 
-    # def _choice_to_config_space(self, name, hp_value):
-    #     values_union = []
-    #     for union_name, union_hp_value in hp_value.configuration.items():
-    #         if isinstance(union_hp_value, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
-    #             child = self._bounded_to_config_space(union_name, union_hp_value)
-    #         elif isinstance(union_hp_value, (hyperparams.Enumeration, hyperparams.UniformBool)):
-    #             child = self._enumeration_to_config_space(union_name, union_hp_value)
-    #         elif isinstance(union_hp_value, (hyperparams.Constant)):
-    #             child = self._constant_to_config_space(union_name, union_hp_value)
-    #         values_union.append((union_name, child))
-    #     return values_union
+    def _choice_to_config_space(self, name, hp_value):
+        choice_combo = []
+        for choice, hyperparameter in hp_value.choices.items():
+            choice_dict = {}
+            choice_dict[name] = choice
+            for type, hp_info in hyperparameter.configuration.items():
+                if type != 'choice':
+                    if isinstance(hp_info, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
+                        values_union = self._bounded_to_config_space(type, hp_info, choice)
+                        choice_dict[type] = values_union
+                    elif isinstance(hp_value, (hyperparams.Constant)):
+                        values_union = self._constant_to_config_space(name, hp_value)
+                        choice_dict[type] = values_union
+                    elif isinstance(hp_info, (hyperparams.Union)):
+                        values_union = self._union_to_config_space(type, hp_info)
+                        choice_dict[type] = values_union
+            choice_combo.append(choice_dict)
+
+        print(choice_combo)
+        return choice_combo
+
+    # boosting_type = {'boosting_type': hp.choice('boosting_type',
+    #                                             [{'boosting_type': 'gbdt',
+    #                                               'subsample': hp.uniform('subsample', 0.5, 1)},
+    #                                              {'boosting_type': 'dart',
+    #                                               'subsample': hp.uniform('subsample', 0.5, 1)},
+    #                                              {'boosting_type': 'goss',
+    #                                               'subsample': 1.0}])}
 
     def _get_hp_search_space(self):
         hyperparameters = self.primitive_class.metadata.query()['primitive_code']['hyperparams']
@@ -91,6 +112,9 @@ class JPLHyperOpt(object):
                 self.parameters[name] = params_config
             elif isinstance(hp_value, (hyperparams.Union)):
                 params_config = self._union_to_config_space(name, hp_value)
+                self.parameters[name] = hp.choice(name, params_config)
+            elif isinstance(hp_value, (hyperparams.Choice)):
+                params_config = self._choice_to_config_space(name, hp_value)
                 self.parameters[name] = hp.choice(name, params_config)
             elif isinstance(hp_value, (hyperparams.Constant)):
                 params_config = self._constant_to_config_space(name, hp_value)
@@ -114,8 +138,15 @@ class JPLHyperOpt(object):
         #         'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0)
         #     }
     def objective(self, args):
+
+        #make this a function
+        #get rid of none
+        subsample = args['kernel'].get('degree')
+        args['kernel'] = args['kernel']['kernel']
+        args['degree'] = subsample
         print(args)
-        clf = RandomForestClassifier(**args, random_state=42)
+        # clf = RandomForestClassifier(**args, random_state=42)
+        clf = SVR(**args)
 
         scores = cross_val_score(clf, self.data, self.target, cv=5)
         return 1 - np.mean(scores)  # Minimize!
@@ -139,7 +170,7 @@ class JPLHyperOpt(object):
         self._get_hp_search_space()
         # Trials object to track progress
         bayes_trials = Trials()
-        MAX_EVALS = 500
+        MAX_EVALS = 6
         print(self.parameters)
         print(sample(self.parameters))
 
@@ -156,6 +187,7 @@ rng = np.random.RandomState(0)
 iris = datasets.load_iris()
 perm = rng.permutation(iris.target.size)
 iris.data, iris.target = shuffle(iris.data, iris.target, random_state=rng)
-primitive_class = index.get_primitive('d3m.primitives.classification.random_forest.SKlearn')
+# primitive_class = index.get_primitive('d3m.primitives.classification.random_forest.SKlearn')
+primitive_class = index.get_primitive('d3m.primitives.regression.svr.SKlearn')
 smac = JPLHyperOpt(primitive_class, iris.data, iris.target)
 smac.optimization()
