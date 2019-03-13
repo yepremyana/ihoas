@@ -1,17 +1,8 @@
 import numpy as np
-from sklearn import datasets
-from sklearn.utils import shuffle
 from sklearn.metrics import accuracy_score, r2_score
 from sklearn.model_selection import cross_val_score
-from sklearn.ensemble.forest import RandomForestClassifier
-from sklearn.svm.classes import SVR
-from d3m import index
 import d3m.metadata.hyperparams as hyperparams
-from hyperopt import hp
-from hyperopt.pyll.stochastic import sample
-from hyperopt import tpe
-from hyperopt import fmin
-from hyperopt import Trials
+from hyperopt import hp, tpe, fmin, Trials
 from hyperopt.pyll import scope
 import importlib
 
@@ -25,6 +16,12 @@ class JPLHyperOpt(object):
         self.target = target
         self.parameters = {}
         self.choice_names = []
+
+        primitive_json = primitive_class.metadata.query().get('name')
+        import_module = ".".join(primitive_json.split(".")[:-1])
+        sklearn_module = importlib.import_module(import_module)
+        import_class = primitive_json.split(".")[-1]
+        self.sklearn_class = getattr(sklearn_module, import_class)
 
     def _enumeration_to_config_space(self, name, hp_value):
         values = hp_value.values
@@ -65,6 +62,7 @@ class JPLHyperOpt(object):
             elif isinstance(union_hp_value, (hyperparams.Constant)):
                 child = self._constant_to_config_space(label, union_hp_value)
             values_union.append(child)
+
         params_config = hp.choice(name, values_union)
         return params_config
 
@@ -87,7 +85,6 @@ class JPLHyperOpt(object):
                         choice_dict[type] = values_union
             choice_combo.append(choice_dict)
 
-        print(choice_combo)
         return choice_combo
 
     def _get_hp_search_space(self):
@@ -119,7 +116,7 @@ class JPLHyperOpt(object):
 
         args = self._translate_union_value(self.choice_names, args)
         print(args)
-        clf = RandomForestClassifier(**args, random_state=42)
+        clf = self.sklearn_class(**args)
 
         # clf = SVR(**args)
         scores = cross_val_score(clf, self.data, self.target, cv=5)
@@ -156,8 +153,6 @@ class JPLHyperOpt(object):
         # Trials object to track progress
         bayes_trials = Trials()
         MAX_EVALS = 15
-        # print(self.parameters)
-        # print(sample(self.parameters))
 
         # Optimize
         best = fmin(fn=self.objective, space=self.parameters, algo=tpe.suggest,
@@ -167,12 +162,3 @@ class JPLHyperOpt(object):
         bayes_trials_results = sorted(bayes_trials.results, key=lambda x: x['loss'])
         print(bayes_trials_results[:2])
         return
-
-rng = np.random.RandomState(0)
-iris = datasets.load_iris()
-perm = rng.permutation(iris.target.size)
-iris.data, iris.target = shuffle(iris.data, iris.target, random_state=rng)
-primitive_class = index.get_primitive('d3m.primitives.classification.random_forest.SKlearn')
-# primitive_class = index.get_primitive('d3m.primitives.regression.svr.SKlearn')
-smac = JPLHyperOpt(primitive_class, iris.data, iris.target)
-smac.optimization()

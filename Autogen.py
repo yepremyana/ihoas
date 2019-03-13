@@ -4,6 +4,7 @@ from sklearn.utils import shuffle
 from d3m import index
 from SMAC import JPLSMAC
 from GridSearch import JPLGridSearch
+from HyperOpt import JPLHyperOpt
 import logging
 logging.basicConfig(level=logging.INFO)
 
@@ -18,10 +19,12 @@ def loop_through():
         #if "SKlearn" in primitive:
         if "classification.random_forest.SKlearn" in primitive:
             primitive_obj = index.get_primitive(primitive)
-            smac = JPLSMAC(primitive_obj, iris.data, iris.target)
-            smac.optimization()
-            grid_search = JPLGridSearch(primitive_obj, iris.data, iris.target)
-            grid_search.optimization()
+            # smac = JPLSMAC(primitive_obj, iris.data, iris.target)
+            # smac.optimization()
+            # grid_search = JPLGridSearch(primitive_obj, iris.data, iris.target)
+            # grid_search.optimization()
+            hyperopt = JPLHyperOpt(primitive_obj, iris.data, iris.target)
+            hyperopt.optimization()
 
 if __name__ == "__main__":
     """
