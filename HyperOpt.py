@@ -57,14 +57,16 @@ class JPLHyperOpt(object):
     def _union_to_config_space(self, name, hp_value):
         values_union = []
         for union_name, union_hp_value in hp_value.configuration.items():
+            label = "{}_{}".format(name, union_name)
             if isinstance(union_hp_value, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
-                child = self._bounded_to_config_space(union_name, union_hp_value)
+                child = self._bounded_to_config_space(label, union_hp_value)
             elif isinstance(union_hp_value, (hyperparams.Enumeration, hyperparams.UniformBool)):
-                child = self._enumeration_to_config_space(union_name, union_hp_value)
+                child = self._enumeration_to_config_space(label, union_hp_value)
             elif isinstance(union_hp_value, (hyperparams.Constant)):
-                child = self._constant_to_config_space(union_name, union_hp_value)
+                child = self._constant_to_config_space(label, union_hp_value)
             values_union.append(child)
-        return values_union
+        params_config = hp.choice(name, values_union)
+        return params_config
 
     def _choice_to_config_space(self, name, hp_value):
         choice_combo = []
@@ -103,7 +105,7 @@ class JPLHyperOpt(object):
                 self.parameters[name] = params_config
             elif isinstance(hp_value, (hyperparams.Union)):
                 params_config = self._union_to_config_space(name, hp_value)
-                self.parameters[name] = hp.choice(name, params_config)
+                self.parameters[name] = params_config
             elif isinstance(hp_value, (hyperparams.Choice)):
                 params_config = self._choice_to_config_space(name, hp_value)
                 self.parameters[name] = hp.choice(name, params_config)
@@ -117,9 +119,9 @@ class JPLHyperOpt(object):
 
         args = self._translate_union_value(self.choice_names, args)
         print(args)
-        # clf = RandomForestClassifier(**args, random_state=42)
-        clf = SVR(**args)
+        clf = RandomForestClassifier(**args, random_state=42)
 
+        # clf = SVR(**args)
         scores = cross_val_score(clf, self.data, self.target, cv=5)
         return 1 - np.mean(scores)  # Minimize!
 
@@ -153,9 +155,9 @@ class JPLHyperOpt(object):
         self._get_hp_search_space()
         # Trials object to track progress
         bayes_trials = Trials()
-        MAX_EVALS = 5
-        print(self.parameters)
-        print(sample(self.parameters))
+        MAX_EVALS = 15
+        # print(self.parameters)
+        # print(sample(self.parameters))
 
         # Optimize
         best = fmin(fn=self.objective, space=self.parameters, algo=tpe.suggest,
@@ -170,7 +172,7 @@ rng = np.random.RandomState(0)
 iris = datasets.load_iris()
 perm = rng.permutation(iris.target.size)
 iris.data, iris.target = shuffle(iris.data, iris.target, random_state=rng)
-# primitive_class = index.get_primitive('d3m.primitives.classification.random_forest.SKlearn')
-primitive_class = index.get_primitive('d3m.primitives.regression.svr.SKlearn')
+primitive_class = index.get_primitive('d3m.primitives.classification.random_forest.SKlearn')
+# primitive_class = index.get_primitive('d3m.primitives.regression.svr.SKlearn')
 smac = JPLHyperOpt(primitive_class, iris.data, iris.target)
 smac.optimization()
