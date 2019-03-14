@@ -75,6 +75,7 @@ class JPLSMAC(object):
         union_child = []
         union_config = []
         for union_name, union_hp_value in hp_value.configuration.items():
+            print(self.cs)
             unique_union_name = "{}_{}".format(name, union_name)
             if isinstance(union_hp_value, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
                 child = self._bounded_to_config_space(unique_union_name, union_hp_value)
@@ -104,6 +105,9 @@ class JPLSMAC(object):
                 if type != 'choice':
                     if isinstance(hp_info, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
                         type_config = self._bounded_to_config_space(type, hp_info)
+                        child_choice = CS.EqualsCondition(type_config, parent_config, choice)
+                    elif isinstance(hp_info, (hyperparams.Constant)):
+                        type_config = self._constant_to_config_space(type, hp_info)
                         child_choice = CS.EqualsCondition(type_config, parent_config, choice)
                     elif isinstance(hp_info, (hyperparams.Union)):
                         type_config = self._union_to_config_space(type, hp_info)
@@ -155,7 +159,7 @@ class JPLSMAC(object):
         cfg = self._translate_union_value(self.union_var, cfg)
         cfg = self._translate_union_value(self.union_choice, cfg)
 
-        clf = self.sklearn_class(**cfg, random_state=42)
+        clf = self.sklearn_class(**cfg)
 
         scores = cross_val_score(clf, self.data, self.target, cv=5)
         return 1 - np.mean(scores)  # Minimize!
@@ -163,14 +167,18 @@ class JPLSMAC(object):
     def _translate_union_value(self, union_list, cfg):
         # We translate Union values:
         for item in union_list:
-            value = cfg[item]
-            cfg[item] = cfg[value]
-            cfg.pop(value, None)  # Remove extra union choices from config
+            if item in cfg:
+                value = cfg[item]
+                cfg[item] = cfg[value]
+                cfg.pop(value, None)  # Remove extra union choices from config
+            else:
+                continue
         return cfg
 
     def optimization(self):
         cs = self._get_hp_search_space()
         print(self.cs)
+
         scenario = Scenario({"run_obj": "quality",  # we optimize quality (alternatively runtime)
                              "runcount-limit": 200,  # maximum function evaluations
                              "cs": self.cs,  # configuration space
