@@ -103,7 +103,9 @@ class JPLSMAC(object):
         for choice, hyperparameter in hp_value.choices.items():
             for type, hp_info in hyperparameter.configuration.items():
                 if type != 'choice':
-                    if isinstance(hp_info, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
+                    if type in self.cs.get_hyperparameter_names():
+                        continue
+                    elif isinstance(hp_info, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
                         type_config = self._bounded_to_config_space(type, hp_info)
                         child_choice = CS.EqualsCondition(type_config, parent_config, choice)
                     elif isinstance(hp_info, (hyperparams.Constant)):
