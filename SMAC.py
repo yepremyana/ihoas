@@ -1,4 +1,5 @@
 import numpy as np
+import collections
 import d3m.metadata.hyperparams as hyperparams
 import ConfigSpace as CS
 from ConfigSpace.hyperparameters import UniformIntegerHyperparameter, \
@@ -75,7 +76,6 @@ class JPLSMAC(object):
         union_child = []
         union_config = []
         for union_name, union_hp_value in hp_value.configuration.items():
-            print(self.cs)
             unique_union_name = "{}_{}".format(name, union_name)
             if isinstance(union_hp_value, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
                 child = self._bounded_to_config_space(unique_union_name, union_hp_value)
@@ -100,10 +100,20 @@ class JPLSMAC(object):
                                                   default_value=default_hp)
         self.cs.add_hyperparameter(parent_config)
 
+        choice_dict = collections.defaultdict(list)
+        conditions = []
         for choice, hyperparameter in hp_value.choices.items():
             for type, hp_info in hyperparameter.configuration.items():
                 if type != 'choice':
                     if type in self.cs.get_hyperparameter_names():
+                        # remove the condition from the cs space
+                        for item in conditions:
+                            if item.child.name != type:
+                                continue
+                            else:
+                                choice_dict[type].append(item.value)
+                                conditions.remove(item)
+                        choice_dict[type].append(choice)
                         continue
                     elif isinstance(hp_info, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
                         type_config = self._bounded_to_config_space(type, hp_info)
@@ -115,7 +125,21 @@ class JPLSMAC(object):
                         type_config = self._union_to_config_space(type, hp_info)
                         child_choice = CS.EqualsCondition(type_config, parent_config, choice)
                         self.union_choice.append(type)
-                    self.cs.add_condition(child_choice)
+                    conditions.append(child_choice)
+        self.cs.add_conditions(conditions)
+
+        for key, value in choice_dict.items():
+            arg_list = []
+            cs = self.cs.get_hyperparameters()
+            for idx in range(len(cs)):
+                if cs[idx].name == key:
+                    child = cs[idx]
+                else:
+                    continue
+            [arg_list.append(CS.EqualsCondition(child, parent_config, key)) for key in value]
+            or_conj = CS.OrConjunction(*arg_list)
+            self.cs.add_condition(or_conj)
+
         return parent_config
 
     def _get_hp_search_space(self):
