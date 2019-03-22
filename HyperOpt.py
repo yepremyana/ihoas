@@ -5,17 +5,25 @@ import d3m.metadata.hyperparams as hyperparams
 from hyperopt import hp, tpe, fmin, Trials
 from hyperopt.pyll import scope
 import importlib
+import csv
+from timeit import default_timer as timer
+import pandas as pd
+import ast
+
+global ITERATION
+ITERATION = 0
 
 class JPLHyperOpt(object):
     """
     Wrapped HyperOpt
     """
-    def __init__(self, primitive_class, data, target) -> None:
+    def __init__(self, primitive_class, data, target, max_evals=50) -> None:
         self.primitive_class = primitive_class
         self.data = data
         self.target = target
         self.parameters = {}
         self.choice_names = []
+        self.MAX_EVALS = max_evals
 
         primitive_json = primitive_class.metadata.query().get('name')
         import_module = ".".join(primitive_json.split(".")[:-1])
@@ -113,29 +121,26 @@ class JPLHyperOpt(object):
         return
 
     def objective(self, args):
+        # Keep track of evals
+        global ITERATION
+        ITERATION += 1
 
         args = self._translate_union_value(self.choice_names, args)
         print(args)
+
+        start = timer()
         clf = self.sklearn_class(**args)
+        run_time = timer() - start
 
-        # clf = SVR(**args)
         scores = cross_val_score(clf, self.data, self.target, cv=5)
-        return 1 - np.mean(scores)  # Minimize!
+        loss = 1 - np.mean(scores)
 
-        # if 'classification' in self.primitive_class:
-        #     cv_iter = StratifiedKFold(n_splits=n_folds,
-        #                               shuffle=shuffle,
-        #                               random_state=random_state
-        #                               ).split(X, y)
-        #     for train_index, valid_index in cv_iter:
-        #         loss = 1 - accuracy_score(cv_y_pool, cv_pred_pool)
-        #
-        # else:
-        #     cv_iter = KFold(n_splits=n_folds,
-        #                     shuffle=shuffle,
-        #                     random_state=random_state).split(X)
-        #     for train_index, valid_index in cv_iter:
-        #         loss = 1 - r2_score(cv_y_pool, cv_pred_pool)
+        out_file = 'hyperopt_trials.csv'
+        of_connection = open(out_file, 'a')
+        writer = csv.writer(of_connection)
+        writer.writerow([loss, args, ITERATION, run_time])
+
+        return loss  # Minimize!
 
     def _translate_union_value(self, choice_list, args):
         # We translate Choice values:
@@ -149,16 +154,47 @@ class JPLHyperOpt(object):
         return args
 
     def optimization(self):
+
         self._get_hp_search_space()
         # Trials object to track progress
         bayes_trials = Trials()
-        MAX_EVALS = 15
+        MAX_EVALS = 100
+
+        # File to save first results
+        out_file = 'hyperopt_trials.csv'
+        of_connection = open(out_file, 'w')
+        writer = csv.writer(of_connection)
+
+        # Write the headers to the file
+        writer.writerow(['loss', 'params', 'iteration', 'train_time'])
+        of_connection.close()
 
         # Optimize
+        start = timer()
         best = fmin(fn=self.objective, space=self.parameters, algo=tpe.suggest,
-                    max_evals=MAX_EVALS, trials=bayes_trials, rstate = np.random.RandomState(52))
-        print(best)
+                    max_evals=self.MAX_EVALS, trials=bayes_trials, rstate = np.random.RandomState(52))
+        run_time = timer() - start
+
         # Sort the trials with lowest loss first
         bayes_trials_results = sorted(bayes_trials.results, key=lambda x: x['loss'])
-        print(bayes_trials_results[:2])
+        print('THE BEST HYPERPARAMETER VALUES:')
+        print(best)
+        print('WITH LOSS:')
+        print(bayes_trials_results[:1][0]['loss'])
+        print('TIME FOR OPTIMIZATION OVER {} EVALS:'.format(self.MAX_EVALS))
+        print(run_time)
         return
+
+    def validate(self, test_data, test_target):
+        results = pd.read_csv('hyperopt_trials.csv')
+
+        # Sort with best scores on top and reset index for slicing
+        results.sort_values('loss', ascending=True, inplace=True)
+        results.reset_index(inplace=True, drop=True)
+
+        # Extract the ideal number of estimators and hyperparameters
+        best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
+
+        # Re-create the best model and train on the training data
+        best_bayes_model = self.sklearn_class(**best_bayes_params)
+        best_bayes_model.fit(test_data, test_target)
