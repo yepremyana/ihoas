@@ -3,32 +3,45 @@ import collections
 import d3m.metadata.hyperparams as hyperparams
 import ConfigSpace as CS
 from ConfigSpace.hyperparameters import UniformIntegerHyperparameter, \
-    UnParametrizedHyperparameter, Constant, CategoricalHyperparameter, \
+    Constant, CategoricalHyperparameter, \
     UniformFloatHyperparameter
 from ConfigSpace.conditions import InCondition
 from smac.scenario.scenario import Scenario
 from smac.facade.smac_facade import SMAC
 from sklearn.model_selection import cross_val_score
+from timeit import default_timer as timer
+import csv
 import importlib
+import os
+current_dir = os.path.abspath(os.path.join(os.path.realpath(__file__), os.pardir))
+from pathlib import Path
+
+global ITERATION
+ITERATION = 0
 
 class JPLSMAC(object):
     """
     Wrapped SMAC
     """
 
-    def __init__(self, primitive_class, data, target) -> None:
+    def __init__(self, primitive_class, data, target, dataset_name='',max_evals=50) -> None:
         self.primitive_class = primitive_class
         self.data = data
         self.target = target
+        self.dataset_name = dataset_name
         self.cs = CS.ConfigurationSpace()
         self.union_var = []
         self.union_choice = []
+        self.MAX_EVALS = max_evals
+        Path(current_dir + '/Results').mkdir(exist_ok=True, parents=True)
+        self.current_dir = current_dir + '/Results'
 
         primitive_json = primitive_class.metadata.query().get('name')
         import_module = ".".join(primitive_json.split(".")[:-1])
         sklearn_module = importlib.import_module(import_module)
-        import_class = primitive_json.split(".")[-1]
-        self.sklearn_class = getattr(sklearn_module, import_class)
+        self.import_class = primitive_json.split(".")[-1]
+        self.sklearn_class = getattr(sklearn_module, self.import_class)
+        self.out_file = self.retrieve_path()
 
     def _enumeration_to_config_space(self, name, hp_value):
         default_hp = hp_value.get_default()
@@ -175,6 +188,10 @@ class JPLSMAC(object):
         --------
         A crossvalidated mean score for the svm on the loaded data-set.
         """
+        # Keep track of evals
+        # global ITERATION
+        ITERATION += 1
+
         cfg = {k: cfg[k] for k in cfg}
 
         # We translate None values:
@@ -185,10 +202,18 @@ class JPLSMAC(object):
         cfg = self._translate_union_value(self.union_var, cfg)
         cfg = self._translate_union_value(self.union_choice, cfg)
 
+        start = timer()
         clf = self.sklearn_class(**cfg)
+        run_time = timer() - start
 
         scores = cross_val_score(clf, self.data, self.target, cv=5)
-        return 1 - np.mean(scores)  # Minimize!
+        loss = 1 - np.mean(scores)
+
+        of_connection = open(self.out_file, 'a')
+        writer = csv.writer(of_connection)
+        writer.writerow([loss, cfg, ITERATION, run_time])
+
+        return loss # Minimize!
 
     def _translate_union_value(self, union_list, cfg):
         # We translate Union values:
@@ -205,8 +230,16 @@ class JPLSMAC(object):
         cs = self._get_hp_search_space()
         print(self.cs)
 
+        # File to save first results
+        of_connection = open(self.out_file, 'w')
+        writer = csv.writer(of_connection)
+
+        # Write the headers to the file
+        writer.writerow(['loss', 'params', 'iteration', 'train_time'])
+        of_connection.close()
+
         scenario = Scenario({"run_obj": "quality",  # we optimize quality (alternatively runtime)
-                             "runcount-limit": 200,  # maximum function evaluations
+                             "runcount-limit": self.MAX_EVALS,  # maximum function evaluations
                              "cs": self.cs,  # configuration space
                              "deterministic": "false",
                              "memory_limit": 100,
@@ -216,13 +249,26 @@ class JPLSMAC(object):
         print("Default Value: %.2f" % (def_value))
 
         print("Optimizing! Depending on your machine, this might take a few minutes.")
+        start = timer()
         smac = SMAC(scenario=scenario, rng=np.random.RandomState(42), tae_runner=self.primitive_from_cfg)
         incumbent = smac.optimize()
+        run_time = timer() - start
 
         inc_value = self.primitive_from_cfg(incumbent)
+        #inc_value = smac.get_tae_runner().run(incumbent, 1)[1]
+        #validate
         print("Optimized Value: %.2f" % (inc_value))
-
+        print('TIME FOR OPTIMIZATION OVER {} EVALS:'.format(self.MAX_EVALS))
+        print(run_time)
         return inc_value
+
+    def _save_to_folder(self, path, savefig):
+        Path(self.current_dir + path).mkdir(exist_ok=True, parents=True)
+        return os.path.join(self.current_dir + path, savefig)
+
+    def retrieve_path(self):
+        return self._save_to_folder('/smac_{}_{}'.format(self.import_class, self.dataset_name),
+                                    'Hyperparameter_Trials.csv')
 
 # need to make a utils file with basic things list lower, upper
 # need to now work with the validation code that they have and whatever else
