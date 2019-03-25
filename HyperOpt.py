@@ -13,7 +13,6 @@ from timeit import default_timer as timer
 import pandas as pd
 import ast
 
-global ITERATION
 ITERATION = 0
 
 class JPLHyperOpt(object):
