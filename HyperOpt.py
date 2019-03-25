@@ -5,6 +5,9 @@ import d3m.metadata.hyperparams as hyperparams
 from hyperopt import hp, tpe, fmin, Trials
 from hyperopt.pyll import scope
 import importlib
+import os
+current_dir = os.path.abspath(os.path.join(os.path.realpath(__file__), os.pardir))
+from pathlib import Path
 import csv
 from timeit import default_timer as timer
 import pandas as pd
@@ -17,19 +20,24 @@ class JPLHyperOpt(object):
     """
     Wrapped HyperOpt
     """
-    def __init__(self, primitive_class, data, target, max_evals=50) -> None:
+
+    def __init__(self, primitive_class, data, target, dataset_name='',max_evals=50) -> None:
         self.primitive_class = primitive_class
         self.data = data
         self.target = target
+        self.dataset_name = dataset_name
         self.parameters = {}
         self.choice_names = []
         self.MAX_EVALS = max_evals
+        Path(current_dir + '/Results').mkdir(exist_ok=True, parents=True)
+        self.current_dir = current_dir + '/Results'
 
         primitive_json = primitive_class.metadata.query().get('name')
         import_module = ".".join(primitive_json.split(".")[:-1])
         sklearn_module = importlib.import_module(import_module)
-        import_class = primitive_json.split(".")[-1]
-        self.sklearn_class = getattr(sklearn_module, import_class)
+        self.import_class = primitive_json.split(".")[-1]
+        self.sklearn_class = getattr(sklearn_module, self.import_class)
+        self.out_file = self.retrieve_path()
 
     def _enumeration_to_config_space(self, name, hp_value):
         values = hp_value.values
@@ -135,12 +143,15 @@ class JPLHyperOpt(object):
         scores = cross_val_score(clf, self.data, self.target, cv=5)
         loss = 1 - np.mean(scores)
 
-        out_file = 'hyperopt_trials.csv'
-        of_connection = open(out_file, 'a')
+        of_connection = open(self.out_file, 'a')
         writer = csv.writer(of_connection)
         writer.writerow([loss, args, ITERATION, run_time])
 
         return loss  # Minimize!
+
+    def _save_to_folder(self, path, savefig):
+        Path(self.current_dir + path).mkdir(exist_ok=True, parents=True)
+        return os.path.join(self.current_dir + path, savefig)
 
     def _translate_union_value(self, choice_list, args):
         # We translate Choice values:
@@ -158,11 +169,9 @@ class JPLHyperOpt(object):
         self._get_hp_search_space()
         # Trials object to track progress
         bayes_trials = Trials()
-        MAX_EVALS = 100
 
         # File to save first results
-        out_file = 'hyperopt_trials.csv'
-        of_connection = open(out_file, 'w')
+        of_connection = open(self.out_file, 'w')
         writer = csv.writer(of_connection)
 
         # Write the headers to the file
@@ -181,12 +190,17 @@ class JPLHyperOpt(object):
         print(best)
         print('WITH LOSS:')
         print(bayes_trials_results[:1][0]['loss'])
+        # ToDO: record stats
+        #make a new with the stats and csv and anything else, then add the figures to the folder.
         print('TIME FOR OPTIMIZATION OVER {} EVALS:'.format(self.MAX_EVALS))
         print(run_time)
         return
 
+    def retrieve_path(self):
+        return self._save_to_folder('/hyperopt_{}_{}'.format(self.import_class, self.dataset_name), 'Hyperparameter_Trials.csv')
+
     def validate(self, test_data, test_target):
-        results = pd.read_csv('hyperopt_trials.csv')
+        results = pd.read_csv(self.out_file)
 
         # Sort with best scores on top and reset index for slicing
         results.sort_values('loss', ascending=True, inplace=True)
@@ -198,3 +212,15 @@ class JPLHyperOpt(object):
         # Re-create the best model and train on the training data
         best_bayes_model = self.sklearn_class(**best_bayes_params)
         best_bayes_model.fit(test_data, test_target)
+
+
+# ToDO: save the trials
+# import json
+#
+# # Save the trial results
+# with open('results/trials.json', 'w') as f:
+#     f.write(json.dumps(bayes_trials.results))
+# ToDO:make a separate csv for just the params.
+# # Save dataframes of parameters
+# bayes_params.to_csv('results/bayes_params.csv', index = False)
+# random_params.to_csv('results/random_params.csv', index = False)
