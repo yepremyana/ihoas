@@ -16,7 +16,6 @@ import os
 current_dir = os.path.abspath(os.path.join(os.path.realpath(__file__), os.pardir))
 from pathlib import Path
 
-global ITERATION
 ITERATION = 0
 
 class JPLSMAC(object):
@@ -189,7 +188,7 @@ class JPLSMAC(object):
         A crossvalidated mean score for the svm on the loaded data-set.
         """
         # Keep track of evals
-        # global ITERATION
+        global ITERATION
         ITERATION += 1
 
         cfg = {k: cfg[k] for k in cfg}
@@ -209,9 +208,11 @@ class JPLSMAC(object):
         scores = cross_val_score(clf, self.data, self.target, cv=5)
         loss = 1 - np.mean(scores)
 
+        read_connection = open(self.out_file, 'r')
         of_connection = open(self.out_file, 'a')
         writer = csv.writer(of_connection)
-        writer.writerow([loss, cfg, ITERATION, run_time])
+        reader = csv.reader(read_connection)
+        writer.writerow([loss, cfg, len(list(reader)), run_time])
 
         return loss # Minimize!
 
@@ -245,8 +246,8 @@ class JPLSMAC(object):
                              "memory_limit": 100,
                              })
 
-        def_value = self.primitive_from_cfg(self.cs.get_default_configuration())
-        print("Default Value: %.2f" % (def_value))
+        # def_value = self.primitive_from_cfg(self.cs.get_default_configuration())
+        # print("Default Value: %.2f" % (def_value))
 
         print("Optimizing! Depending on your machine, this might take a few minutes.")
         start = timer()
@@ -270,8 +271,9 @@ class JPLSMAC(object):
         return self._save_to_folder('/smac_{}_{}'.format(self.import_class, self.dataset_name),
                                     'Hyperparameter_Trials.csv')
 
-# need to make a utils file with basic things list lower, upper
+# need to make a utils file with basic things list lower, upper, save to folder, retrieve path
 # need to now work with the validation code that they have and whatever else
 # need to check the other functions SMAC has
 # fix overlay files, d3m issue, fix hyperparameter type parameters
 # need to fix the default in union, it is wrong bc i am not setting the choices default but configuration wont give it to me, self.default_hyperparameter configuration[default]
+# understand why global iteration wont work
