@@ -17,7 +17,7 @@ class Visual(object):
     def __init__(self, file) -> None:
         self.file = file
         self.results = pd.read_csv(self.file)
-        self.current_dir = os.path.join(current_dir, os.path.splitext(file)[0])
+        self.current_dir = os.path.join(current_dir, os.path.dirname(file) + '/Visual')
 
     def sort_best_scores(self):
         results = self.results
@@ -27,7 +27,7 @@ class Visual(object):
         results.reset_index(inplace = True, drop = True)
         print(results)
 
-        return
+        return results
 
     def _dataframe_parameters(self):
         results_parameters = []
@@ -71,10 +71,14 @@ class Visual(object):
             if is_float_dtype(df_parameters[item]) or is_integer_dtype(df_parameters[item]):
                 continue
             else:
+                # ToDO: fix
+                # this is broken
                 for i in range(len(df_parameters[item].index)):
                     if type(df_parameters[item][i]) == str or type(df_parameters[item][i]) == bool:
                         continue
                     else:
+                        # ToDO: enhancement
+                        #this is where I could potentially make it so that an additional bar said numerical
                         df_parameters[item].drop(i)
             plt.figure(figsize=(20, 8))
             plt.rcParams['font.size'] = 18
@@ -83,6 +87,8 @@ class Visual(object):
             plt.savefig(path)
 
     def density_loss(self):
+        plt.figure(figsize=(20, 8))
+        plt.rcParams['font.size'] = 18
         sns.lineplot(self.results['iteration'], self.results['loss'], color="coral").set_title('Loss over Iteration')
         plt.xlabel('iteration')
         plt.ylabel('loss')
@@ -105,47 +111,42 @@ class Visual(object):
                     else:
                         df_parameters[item] = df_parameters[item].drop(i)
 
-            # df_parameters['iteration'] = self.results['iteration']
+            plt.figure(figsize=(20, 8))
+            plt.rcParams['font.size'] = 18
             sns.catplot(data=df_parameters, x = 'iteration', y = item).fig.suptitle('{} over iterations'.format(item))
-            path = self._save_to_folder('/category_parameters', '{}_category_iter_graph.pdf'.format(item))
+            path = self._save_to_folder('/category_evolution', '{}_category_iter_graph.pdf'.format(item))
             plt.savefig(path)
 
     def numerical_evolution(self, params=None):
         df_parameters = self._dataframe_parameters()
         if not params:
             params = list(df_parameters)
-        df_parameters['iteration'] = self.results['iteration']
 
         for i, item in enumerate(params):
             df_parameters[item] = pd.to_numeric(df_parameters[item], errors='coerce')
-            df_parameters[item].dropna(inplace=True)
+            df_item = pd.concat([df_parameters[item], self.results['iteration']], axis = 1)
+            df_item.dropna(axis = 0, how = 'any',inplace=True)
             plt.figure(figsize=(20, 8))
             plt.rcParams['font.size'] = 18
-            if not df_parameters[item].empty:
-                sns.regplot(x = 'iteration', y = item, data=df_parameters).set_title('{} over iterations'.format(item))
+            if not df_item.empty:
+                sns.regplot(data=df_item, x = 'iteration', y = item).set_title('{} over iterations'.format(item))
                 path = self._save_to_folder('/numerical_evolution', '{}_numerical_iter_graph.pdf'.format(item))
                 plt.savefig(path)
 
-
-visual = Visual('hyperopt_trials.csv')
-visual.density_parameters()
+#
+# visual = Visual('Results/hyperopt_RandomForestClassifier_/Hyperparameter_Trials.csv')
+# visual.density_parameters()
 # visual.numerical_evolution()
-visual.sort_best_scores()
-visual.categorical_bar_graph()
-visual.categorical_evolution()
-visual.density_loss()
-#make an autogen for looping through all csv files
+# visual.sort_best_scores()
+# visual.categorical_bar_graph()
+# visual.categorical_evolution()
+# visual.density_loss()
+
+# ToDO:
 # need to make another function for looking at all of the optimization techniques comparisons --> heat map over values
 # need to fix bool options in numerical numerical_evolution and density_parameters
-# need to fix gamma and coef0 in numerical_evolution and density_parameters
-# need to fix gamm bar graph
+# need to fix gamma bar graph, count when it picked the auto vs numerical choice in bar graph.
 
-# import json
-#
-# # Save the trial results
-# with open('results/trials.json', 'w') as f:
-#     f.write(json.dumps(bayes_trials.results))
-
-# # Save dataframes of parameters
-# bayes_params.to_csv('results/bayes_params.csv', index = False)
-# random_params.to_csv('results/random_params.csv', index = False)
+##### THINGs TO DO
+# 1. fix other techniques
+# 2. work on validate function
