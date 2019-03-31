@@ -1,5 +1,6 @@
 import numpy as np
-from sklearn.metrics import accuracy_score, r2_score
+from sklearn.metrics import accuracy_score, r2_score, precision_score, \
+                            recall_score, f1_score, explained_variance_score
 from sklearn.model_selection import cross_val_score
 import d3m.metadata.hyperparams as hyperparams
 from hyperopt import hp, tpe, fmin, Trials
@@ -9,9 +10,9 @@ import os
 current_dir = os.path.abspath(os.path.join(os.path.realpath(__file__), os.pardir))
 from pathlib import Path
 import csv
+import json
 from timeit import default_timer as timer
-import pandas as pd
-import ast
+from hyperopt import space_eval
 
 ITERATION = 0
 
@@ -27,7 +28,9 @@ class JPLHyperOpt(object):
         self.dataset_name = dataset_name
         self.parameters = {}
         self.choice_names = []
+        self.best_params = None
         self.MAX_EVALS = max_evals
+        self.run_time = None
         Path(current_dir + '/Results').mkdir(exist_ok=True, parents=True)
         self.current_dir = current_dir + '/Results'
 
@@ -53,7 +56,7 @@ class JPLHyperOpt(object):
             if default_hp == 0:
                 upper = 10
             else:
-                upper = 2 * (default_hp)
+                upper = 2 * (abs(default_hp))
         else:
             upper = hp_value.upper
         structure_type = hp_value.structural_type
@@ -145,6 +148,7 @@ class JPLHyperOpt(object):
         of_connection = open(self.out_file, 'a')
         writer = csv.writer(of_connection)
         writer.writerow([loss, args, ITERATION, run_time])
+        of_connection.close()
 
         return loss  # Minimize!
 
@@ -182,44 +186,46 @@ class JPLHyperOpt(object):
         best = fmin(fn=self.objective, space=self.parameters, algo=tpe.suggest,
                     max_evals=self.MAX_EVALS, trials=bayes_trials, rstate = np.random.RandomState(52))
         run_time = timer() - start
-
+        self.run_time = run_time
         # Sort the trials with lowest loss first
+        self.save_trials(bayes_trials.results)
         bayes_trials_results = sorted(bayes_trials.results, key=lambda x: x['loss'])
-        print('THE BEST HYPERPARAMETER VALUES:')
+        self.best_params = space_eval(self.parameters, best)
+        print('The parameters combination that would give best accuracy is : ')
         print(best)
-        print('WITH LOSS:')
-        print(bayes_trials_results[:1][0]['loss'])
+        print('The min loss achieved after parameter tuning via hyperopt is : ', bayes_trials_results[:1][0]['loss'])
+        # print(bayes_trials_results[:1][0]['loss'])
         # ToDO: record stats
         #make a new with the stats and csv and anything else, then add the figures to the folder.
         print('TIME FOR OPTIMIZATION OVER {} EVALS:'.format(self.MAX_EVALS))
         print(run_time)
-        return
+        return self.best_params
 
     def retrieve_path(self):
         return self._save_to_folder('/hyperopt_{}_{}'.format(self.import_class, self.dataset_name), 'Hyperparameter_Trials.csv')
 
-    def validate(self, test_data, test_target):
-        results = pd.read_csv(self.out_file)
+    def validate(self, test_data, test_target, pos_label, average):
+        best_model = self.sklearn_class(**self.best_params)
+        best_model.fit(self.data, self.target)
+        prediction = best_model.predict(test_data)
+        score = best_model.score(test_data, test_target)
 
-        # Sort with best scores on top and reset index for slicing
-        results.sort_values('loss', ascending=True, inplace=True)
-        results.reset_index(inplace=True, drop=True)
+        if 'classification' in str(self.primitive_class):
+            f1 = f1_score(test_target, prediction, average=average, pos_label=pos_label)
+            accuracy = accuracy_score(test_target, prediction)
+            precision = precision_score(test_target, prediction, average=average, pos_label=pos_label)
+            recall = recall_score(test_target, prediction, average=average, pos_label=pos_label)
+            #confusion matrix
+            scores_dict = {'optimization_technique': 'hyperopt', 'estimator': str(self.primitive_class), 'dataset': self.dataset_name, 'accuracy_score': accuracy, 'precision_score': precision, 'recall_score': recall, 'f1_score': f1, 'prediction': prediction, 'score': score, 'max_evals': self.MAX_EVALS, 'total_time':self.run_time, 'best_params':self.best_params}
 
-        # Extract the ideal number of estimators and hyperparameters
-        best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
+        elif 'regression' in str(self.primitive_class):
+            r2 = r2_score(test_target, prediction)
+            explained_variance = explained_variance_score(test_target, prediction)
+            scores_dict = {'optimization_technique': 'hyperopt', 'estimator': str(self.primitive_class), 'dataset': self.dataset_name, 'r2': r2, 'explained_variance_score': explained_variance, 'score': score, 'max_evals': self.MAX_EVALS, 'total_time':self.run_time, 'best_params':self.best_params}
 
-        # Re-create the best model and train on the training data
-        best_bayes_model = self.sklearn_class(**best_bayes_params)
-        best_bayes_model.fit(test_data, test_target)
+        return scores_dict
 
-
-# ToDO: save the trials
-# import json
-#
-# # Save the trial results
-# with open('results/trials.json', 'w') as f:
-#     f.write(json.dumps(bayes_trials.results))
-# ToDO:make a separate csv for just the params.
-# # Save dataframes of parameters
-# bayes_params.to_csv('results/bayes_params.csv', index = False)
-# random_params.to_csv('results/random_params.csv', index = False)
+    def save_trials(self, trials):
+        path = self._save_to_folder('/hyperopt_{}_{}'.format(self.import_class, self.dataset_name), 'Trials.json')
+        with open(path, 'w') as outfile:
+            outfile.write(json.dumps(trials))
