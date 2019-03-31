@@ -5,6 +5,8 @@ import ConfigSpace as CS
 from ConfigSpace.hyperparameters import UniformIntegerHyperparameter, \
     Constant, CategoricalHyperparameter, \
     UniformFloatHyperparameter
+from sklearn.metrics import accuracy_score, r2_score, precision_score, \
+                            recall_score, f1_score, explained_variance_score
 from ConfigSpace.conditions import InCondition
 from smac.scenario.scenario import Scenario
 from smac.facade.smac_facade import SMAC
@@ -32,6 +34,8 @@ class JPLSMAC(object):
         self.union_var = []
         self.union_choice = []
         self.MAX_EVALS = max_evals
+        self.best_params = None
+        self.run_time = None
         Path(current_dir + '/Results').mkdir(exist_ok=True, parents=True)
         self.current_dir = current_dir + '/Results'
 
@@ -65,7 +69,7 @@ class JPLSMAC(object):
             if default_hp == 0:
                 upper = 10
             else:
-                upper = 2 * (default_hp)
+                upper = 2 * (abs(default_hp))
         else:
             upper = hp_value.upper
         structure_type = hp_value.structural_type
@@ -253,15 +257,16 @@ class JPLSMAC(object):
         start = timer()
         smac = SMAC(scenario=scenario, rng=np.random.RandomState(42), tae_runner=self.primitive_from_cfg)
         incumbent = smac.optimize()
+        self.best_params = incumbent
         run_time = timer() - start
-
-        inc_value = self.primitive_from_cfg(incumbent)
+        self.run_time = run_time
+        # inc_value = self.primitive_from_cfg(incumbent)
         #inc_value = smac.get_tae_runner().run(incumbent, 1)[1]
         #validate
-        print("Optimized Value: %.2f" % (inc_value))
+        # print("Optimized Value: %.2f" % (inc_value))
         print('TIME FOR OPTIMIZATION OVER {} EVALS:'.format(self.MAX_EVALS))
         print(run_time)
-        return inc_value
+        return
 
     def _save_to_folder(self, path, savefig):
         Path(self.current_dir + path).mkdir(exist_ok=True, parents=True)
@@ -271,7 +276,42 @@ class JPLSMAC(object):
         return self._save_to_folder('/smac_{}_{}'.format(self.import_class, self.dataset_name),
                                     'Hyperparameter_Trials.csv')
 
-# need to make a utils file with basic things list lower, upper, save to folder, retrieve path
+    def validate(self, test_data, test_target, pos_label, average):
+        cfg = {k: self.best_params[k] for k in self.best_params}
+
+        # We translate None values:
+        for item, key in cfg.items():
+            if key == "None":
+                cfg[item] = None
+
+        cfg = self._translate_union_value(self.union_var, cfg)
+        cfg = self._translate_union_value(self.union_choice, cfg)
+
+        best_model = self.sklearn_class(**cfg)
+        best_model.fit(self.data, self.target)
+        prediction = best_model.predict(test_data)
+        score = best_model.score(test_data, test_target)
+
+        if 'classification' in str(self.primitive_class):
+            f1 = f1_score(test_target, prediction, average=average, pos_label=pos_label)
+            accuracy = accuracy_score(test_target, prediction)
+            precision = precision_score(test_target, prediction, average=average, pos_label=pos_label)
+            recall = recall_score(test_target, prediction, average=average, pos_label=pos_label)
+            # confusion matrix
+            scores_dict = {'optimization_technique': 'smac', 'estimator': str(self.primitive_class), 'dataset': self.dataset_name,
+                           'accuracy_score': accuracy, 'precision_score': precision, 'recall_score': recall,
+                           'f1_score': f1, 'prediction': prediction, 'score': score, 'max_evals': self.MAX_EVALS, 'total_time': self.run_time, 'best_params':cfg}
+
+        elif 'regression' in str(self.primitive_class):
+            r2 = r2_score(test_target, prediction)
+            explained_variance = explained_variance_score(test_target, prediction)
+            scores_dict = {'optimization_technique': 'smac', 'estimator': str(self.primitive_class),
+                           'dataset': self.dataset_name, 'r2': r2, 'explained_variance_score': explained_variance,
+                           'score': score, 'max_evals': self.MAX_EVALS, 'total_time': self.run_time, 'best_params':cfg }
+
+        return scores_dict
+
+            # need to make a utils file with basic things list lower, upper, save to folder, retrieve path
 # need to now work with the validation code that they have and whatever else
 # need to check the other functions SMAC has
 # fix overlay files, d3m issue, fix hyperparameter type parameters
