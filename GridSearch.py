@@ -2,11 +2,13 @@ import numpy as np
 import d3m.metadata.hyperparams as hyperparams
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import cross_val_score
-from sklearn.metrics import classification_report
+from sklearn.metrics import accuracy_score, r2_score, precision_score, \
+                            recall_score, f1_score
 import os
 current_dir = os.path.abspath(os.path.join(os.path.realpath(__file__), os.pardir))
 from pathlib import Path
 import csv
+import json
 import importlib
 from timeit import default_timer as timer
 
@@ -17,6 +19,7 @@ class JPLGridSearch(object):
         self.target = target
         self.dataset_name = dataset_name
         self.parameters = {}
+        self.best_params = None
         Path(current_dir + '/Results').mkdir(exist_ok=True, parents=True)
         self.current_dir = current_dir + '/Results'
 
@@ -130,10 +133,8 @@ class JPLGridSearch(object):
         start = timer()
         clf.fit(self.data, self.target)
         print(sorted(clf.cv_results_['mean_test_score']))
-        # y_pred = clf.predict(self.data)
         print("GridSearchCV took %.2f seconds for %d candidate parameter settings."
               % (timer() - start, len(clf.cv_results_['params'])))
-        # print(y_pred)
 
         # File to save first results
         of_connection = open(self.out_file, 'w')
@@ -145,9 +146,10 @@ class JPLGridSearch(object):
         for val in l:
             writer.writerow(val)
         of_connection.close()
-        # clf.score(data2_features, data2_target)
+
         print('The parameters combination that would give best accuracy is : ')
         print(clf.best_params_)
+        self.best_params = clf.best_params_
         print('The best accuracy achieved after parameter tuning via grid search is : ', clf.best_score_)
         print(clf.cv_results_)
 
@@ -159,18 +161,28 @@ class JPLGridSearch(object):
         return self._save_to_folder('/gridsearch_{}_{}'.format(self.import_class, self.dataset_name), 'Hyperparameter_Trials.csv')
 
     def validate(self, test_data, test_target):
-        test_score = self.sklearn_class(*self.best_params).fit(self.data, self.target).score(test_data, test_target)
+        # test_score = self.sklearn_class(*self.best_params).fit(self.data, self.target).score(test_data, test_target)
+        best_model = self.sklearn_class(**self.best_params)
+        best_model.fit(self.data, self.target)
+        prediction = best_model.predict(test_data)
+        accuracy = accuracy_score(test_target, prediction)
+        precision = precision_score(test_target, prediction, average=None)
+        recall = recall_score(test_target, prediction, average=None)
+        f1 = f1_score(test_target, prediction, average=None)
+        r2 = r2_score(test_target, prediction)
+        print('Accuracy Score : ', accuracy)
+        print('Precision Score : ', precision)
+        print('Recall Score : ', recall)
+        print('F1 Score : ', f1)
+        print('R2 score:', r2)
 
-        return test_score
+        return {'optimization_technique': 'gridsearch', 'dataset': self.dataset_name, 'accuracy_score': accuracy, 'precision_score': precision, 'recall_score': recall, 'f1_score': f1, 'prediction': prediction, 'r2_score': r2}
 
-        #cv_results_
-        #score(X, y=None)
-        # New Model Evaluation metrics
-        # print('Accuracy Score : ' + str(accuracy_score(y_test, y_pred_acc)))
-        # print('Precision Score : ' + str(precision_score(y_test, y_pred_acc)))
-        # print('Recall Score : ' + str(recall_score(y_test, y_pred_acc)))
-        # print('F1 Score : ' + str(f1_score(y_test, y_pred_acc)))
-        #   r2_score
-        # # Logistic Regression (Grid Search) Confusion matrix
-        # confusion_matrix(y_test, y_pred_acc)
-        #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0, random_state=0)
+    # def save_trials(self, trials):
+    #     path = self._save_to_folder('/gridsearch_{}_{}'.format(self.import_class, self.dataset_name), 'Trials.json')
+    #     with open(path, 'w') as outfile:
+    #         outfile.write(json.dumps(trials))
+
+# # Logistic Regression (Grid Search) Confusion matrix
+# confusion_matrix(y_test, y_pred_acc)
+#X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0, random_state=0)
