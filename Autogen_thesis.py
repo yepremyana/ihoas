@@ -5,6 +5,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.utils import shuffle
 from d3m import index
 from SMAC import JPLSMAC
+from BOHB import JPLBOHB
 from GridSearch import JPLGridSearch
 from Visual import Visual
 from HyperOpt import JPLHyperOpt
@@ -16,30 +17,37 @@ import os
 
 #['fertility', version=1, cache=False],['blogger', version=1, cache=False,]['nursery', version=3, cache=False]['parkinsons', version=1, cache=False]
 # all_datasets = [['fertility', 1], ['blogger', 1], ['nursery', 3], ['parkinsons', 1]]
-all_datasets = [[['fertility', 1], 'binary', '1', 'classification'] ]
-
-all_primitives = ['d3m.primitives.classification.random_forest.SKlearn', 'd3m.primitives.classification.svc.SKlearn']
+# all_datasets = [[['eeg-eye-state', 1], 'binary', '1', 'classification'] ]
+all_datasets = [[['fried', 1], 'binary', '1', 'classification'] ]
+# all_primitives = ['d3m.primitives.classification.random_forest.SKlearn', 'd3m.primitives.classification.svc.SKlearn']
+all_primitives = ['d3m.primitives.regression.ard.SKlearn']
 def loop_through():
     for dataset_arg in all_datasets:
         imp = SimpleImputer()
         dataset = fetch_openml(*dataset_arg[0], cache=False)
+        # preprocess = Preprocessing(data_id = )
+        # X_temp, y_temp = preprocess.simple_preprocessing()
+        # X, y = shuffle(X_temp, y_temp, random_state=rng)
+        # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
         X_temp, y = shuffle(dataset.data, dataset.target, random_state=rng)
         X = imp.fit_transform(X_temp)
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
         for primitive in all_primitives:
                 primitive_obj = index.get_primitive(primitive)
-                smac = JPLSMAC(primitive_obj, X_train, y_train, dataset_name=dataset_arg[0][0], max_evals = 20)
-                smac.optimization()
-                all_visuals(smac)
-                all_scores(smac, X_test, y_test, dataset_arg[3], dataset_arg[2], dataset_arg[1])
+                # smac = JPLSMAC(primitive_obj, X_train, y_train, dataset_name=dataset_arg[0][0], max_evals = 10)
+                # smac.optimization()
+                # bohb = JPLBOHB(primitive_obj, X_train, y_train, dataset_name=dataset_arg[0][0], max_evals = 20)
+                # bohb.optimization()
+                # all_visuals(smac)
+                # all_scores(smac, X_test, y_test, dataset_arg[3], dataset_arg[2], dataset_arg[1])
                 # grid_search = JPLGridSearch(primitive_obj, X_train, y_train, dataset_name=dataset_arg[0])
                 # grid_search.optimization()
                 # all_visuals(grid_search)
                 # all_scores(grid_search, X_test, y_test)
-                hyperopt = JPLHyperOpt(primitive_obj, X, y, dataset_name=dataset_arg[0][0], max_evals = 20)
+                hyperopt = JPLHyperOpt(primitive_obj, X, y, dataset_name=dataset_arg[0][0], max_evals = 10)
                 hyperopt.optimization()
-                all_visuals(hyperopt)
-                all_scores(hyperopt, X_test, y_test, dataset_arg[3], dataset_arg[2], dataset_arg[1])
+                # all_visuals(hyperopt)
+                # all_scores(hyperopt, X_test, y_test, dataset_arg[3], dataset_arg[2], dataset_arg[1])
 
 def all_scores(algo, X_test, y_test, type_of_estimator, pos_label, average):
     outfile = open('Results/{}_scores.csv'.format(type_of_estimator), 'a')
