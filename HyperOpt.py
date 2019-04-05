@@ -184,7 +184,7 @@ class JPLHyperOpt(object):
         # Optimize
         start = timer()
         best = fmin(fn=self.objective, space=self.parameters, algo=tpe.suggest,
-                    max_evals=self.MAX_EVALS, trials=bayes_trials, rstate = np.random.RandomState(52))
+                    max_evals=self.MAX_EVALS, trials=bayes_trials, catch_eval_exceptions = True, rstate = np.random.RandomState(52))
         run_time = timer() - start
         self.run_time = run_time
         # Sort the trials with lowest loss first
