@@ -139,6 +139,9 @@ class JPLBOHB(object):
                     elif isinstance(hp_info, (hyperparams.Constant)):
                         type_config = self._constant_to_config_space(type, hp_info)
                         child_choice = CS.EqualsCondition(type_config, parent_config, choice)
+                    elif isinstance(hp_info, (hyperparams.Enumeration)):
+                        type_config = self._enumeration_to_config_space(type, hp_info)
+                        child_choice = CS.EqualsCondition(type_config, parent_config, choice)
                     elif isinstance(hp_info, (hyperparams.Union)):
                         type_config = self._union_to_config_space(type, hp_info)
                         child_choice = CS.EqualsCondition(type_config, parent_config, choice)
@@ -193,8 +196,7 @@ class JPLBOHB(object):
                     run_id='example1', nameserver='127.0.0.1',
                     min_budget=0.1, max_budget=0.99
                     )
-        # res = bohb.run(n_iterations=self.MAX_EVALS)
-        res = bohb.run(n_iterations=10)
+        res = bohb.run(n_iterations=self.MAX_EVALS)
         # bb_iterations = int(args.num_iterations * (1+(np.log(args.max_budget) - np.log(args.min_budget))/np.log(args.eta)))
 
         bohb.shutdown(shutdown_workers=True)
@@ -243,10 +245,7 @@ class JPLBOHB(object):
         print('A total of %i runs where executed.' % len(res.get_all_runs()))
         print('Total budget corresponds to %.1f full function evaluations.'%(sum([r.budget for r in res.get_all_runs()])/81))
         print('The run took  %.1f seconds to complete.'%(all_runs[-1].time_stamps['finished'] - all_runs[0].time_stamps['started']))
-  ###game plan
-        # use res.get_all_runs() and only pick the highest budget, loss,  at each iteration, time is the time during the iteration, with the params
-        # id2config[(0,0,0)]['config']
-        # hpvis.losses_over_time(all_runs) plt.show()
+
     def _save_to_folder(self, path, savefig):
         Path(self.current_dir + path).mkdir(exist_ok=True, parents=True)
         return os.path.join(self.current_dir + path, savefig)
