@@ -137,6 +137,9 @@ class JPLSMAC(object):
                     elif isinstance(hp_info, (hyperparams.Constant)):
                         type_config = self._constant_to_config_space(type, hp_info)
                         child_choice = CS.EqualsCondition(type_config, parent_config, choice)
+                    elif isinstance(hp_info, (hyperparams.Enumeration)):
+                        type_config = self._enumeration_to_config_space(type, hp_info)
+                        child_choice = CS.EqualsCondition(type_config, parent_config, choice)
                     elif isinstance(hp_info, (hyperparams.Union)):
                         type_config = self._union_to_config_space(type, hp_info)
                         child_choice = CS.EqualsCondition(type_config, parent_config, choice)
