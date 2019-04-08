@@ -38,6 +38,7 @@ class JPLBOHB(object):
         self.import_class = primitive_json.split(".")[-1]
         self.sklearn_class = getattr(sklearn_module, self.import_class)
         self.out_file = self.retrieve_path()
+        self.run_id = 'bohb_{}_{}'.format(self.import_class, self.dataset_name)
 
     def optimization(self):
         config_space = Config_Space(self.primitive_class)
@@ -46,14 +47,14 @@ class JPLBOHB(object):
         self.union_choice = config_space.get_union_choice()
         print(self.cs)
 
-        NS = hpns.NameServer(run_id='example1', host='127.0.0.1', port=None)
+        NS = hpns.NameServer(run_id=self.run_id, host='127.0.0.1', port=None)
         NS.start()
 
-        w = BOHBWorker(sklearn_class=self.sklearn_class, config=self.cs, union_var=self.union_var, union_choice=self.union_choice,data=self.data,target=self.target,nameserver='127.0.0.1', run_id='example1')
+        w = BOHBWorker(sklearn_class=self.sklearn_class, config=self.cs, union_var=self.union_var, union_choice=self.union_choice,data=self.data,target=self.target,nameserver='127.0.0.1', run_id=self.run_id)
         w.run(background=True)
 
         bohb = BOHB(configspace=w.get_configspace(),
-                    run_id='example1', nameserver='127.0.0.1',
+                    run_id=self.run_id, nameserver='127.0.0.1',
                     min_budget=0.1, max_budget=0.99
                     )
         res = bohb.run(n_iterations=self.MAX_EVALS)
@@ -80,7 +81,7 @@ class JPLBOHB(object):
         writer = csv.writer(of_connection)
 
         # Write the headers to the file
-        writer.writerow(['loss', 'params', 'iteration', 'train_time'])
+        writer.writerow(['loss', 'params', 'iteration', 'train_time', 'cum_train_time'])
         of_connection.close()
 
         for item in unique:
@@ -89,9 +90,10 @@ class JPLBOHB(object):
             iteration_num = item.config_id[0]
             loss = item.loss
             time = item.time_stamps['finished'] - item.time_stamps['started']
+            cum_time = item.time_stamps['finished'] - all_runs[0].time_stamps['started']
             of_connection = open(self.out_file, 'a')
             writer = csv.writer(of_connection)
-            writer.writerow([loss, params, iteration_num, time])
+            writer.writerow([loss, params, iteration_num, time, cum_time])
             of_connection.close()
 
         inc_run = inc_runs[-1]
@@ -127,17 +129,7 @@ class JPLBOHB(object):
                 'best_params': self.best_params}
 
     def validate(self, test_data, test_target):
-        cfg = {k: self.best_params[k] for k in self.best_params}
-
-        # We translate None values:
-        for item, key in cfg.items():
-            if key == "None":
-                cfg[item] = None
-
-        cfg = self._translate_union_value(self.union_var, cfg)
-        cfg = self._translate_union_value(self.union_choice, cfg)
-
-        best_model = self.sklearn_class(**cfg)
+        best_model = self.sklearn_class(**self.best_params)
         best_model.fit(self.data, self.target)
         prediction = best_model.predict(test_data)
         score = best_model.score(test_data, test_target)
