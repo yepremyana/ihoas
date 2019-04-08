@@ -32,11 +32,9 @@ class JPLHyperOpt(object):
         self.data = data
         self.target = target
         self.dataset_name = dataset_name
+        self.MAX_EVALS = max_evals
         self.parameters = {}
         self.choice_names = []
-        self.best_params = None
-        self.MAX_EVALS = max_evals
-        self.run_time = None
         Path(current_dir + '/Results').mkdir(exist_ok=True, parents=True)
         self.current_dir = current_dir + '/Results'
 
@@ -147,18 +145,20 @@ class JPLHyperOpt(object):
         start = timer()
         clf = self.sklearn_class(**args)
         run_time = timer() - start
+        cum_time = timer() - self.start
 
         scores = cross_val_score(clf, self.data, self.target, cv=5)
         loss = 1 - np.mean(scores)
 
         of_connection = open(self.out_file, 'a')
         writer = csv.writer(of_connection)
-        writer.writerow([loss, args, ITERATION, run_time])
+        writer.writerow([loss, args, ITERATION, run_time, cum_time])
         of_connection.close()
 
         return loss  # Minimize!
 
     def _save_to_folder(self, path, savefig):
+        #change it so that if it exists then make another .csv file
         Path(self.current_dir + path).mkdir(exist_ok=True, parents=True)
         return os.path.join(self.current_dir + path, savefig)
 
@@ -184,15 +184,15 @@ class JPLHyperOpt(object):
         writer = csv.writer(of_connection)
 
         # Write the headers to the file
-        writer.writerow(['loss', 'params', 'iteration', 'train_time'])
+        writer.writerow(['loss', 'params', 'iteration', 'train_time', 'cum_train_time'])
         of_connection.close()
 
         # Optimize
-        start = timer()
+        self.start = timer()
         best = fmin(fn=self.objective, space=self.parameters, algo=tpe.suggest,
                     max_evals=self.MAX_EVALS, trials=bayes_trials, catch_eval_exceptions = True, rstate = np.random.RandomState(52))
-        run_time = timer() - start
-        self.run_time = run_time
+        self.run_time = timer() - self.start
+
         # Sort the trials with lowest loss first
         self.save_trials(bayes_trials.results)
         bayes_trials_results = sorted(bayes_trials.results, key=lambda x: x['loss'])
@@ -207,7 +207,7 @@ class JPLHyperOpt(object):
         # ToDO: record stats
         #make a new with the stats and csv and anything else, then add the figures to the folder.
         print('TIME FOR OPTIMIZATION OVER {} EVALS:'.format(self.MAX_EVALS))
-        print(run_time)
+        print(self.run_time)
         return self.best_params
 
     def retrieve_path(self):
@@ -228,7 +228,6 @@ class JPLHyperOpt(object):
 
     def validate(self, test_data, test_target):
         best_model = self.sklearn_class(**self.best_params)
-        print(self.best_params)
         best_model.fit(self.data, self.target)
         prediction = best_model.predict(test_data)
         score = best_model.score(test_data, test_target)
