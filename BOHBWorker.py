@@ -1,11 +1,9 @@
-import numpy
-import time
-
-import ConfigSpace as CS
-from hpbandster.core.worker import Worker
 import numpy as np
+
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import train_test_split
+
+from hpbandster.core.worker import Worker
 
 class BOHBWorker(Worker):
     def __init__(self, *args, sklearn_class, config,union_var,union_choice, data, target,**kwargs):
@@ -20,11 +18,6 @@ class BOHBWorker(Worker):
 
     def compute(self, config, budget, **kwargs):
         """
-        Simple example for a compute function
-        The loss is just a the config + some noise (that decreases with the budget)
-
-        For dramatization, the function can sleep for a given interval to emphasizes
-        the speed ups achievable with parallel workers.
 
         Args:
             config: dictionary containing the sampled configurations by the optimizer
@@ -53,8 +46,8 @@ class BOHBWorker(Worker):
         # res = numpy.clip(config['x'] + numpy.random.randn() / budget, config['x'] / 2, 1.5 * config['x'])
 
         return ({
-            'loss': loss,  # this is the a mandatory field to run hyperband
-            'info': {'loss':loss, 'params': cfg}  # can be used for any user-defined information - also mandatory
+            'loss': loss,
+            'info': {'loss':loss, 'params': cfg}  # used for user-defined info
         })
 
     def get_configspace(self):
