@@ -1,22 +1,22 @@
 import numpy as np
-import collections
-import d3m.metadata.hyperparams as hyperparams
-import ConfigSpace as CS
-from ConfigSpace.hyperparameters import UniformIntegerHyperparameter, \
-    Constant, CategoricalHyperparameter, \
-    UniformFloatHyperparameter
-from sklearn.metrics import accuracy_score, r2_score, precision_score, \
-                            recall_score, f1_score, explained_variance_score
-from ConfigSpace.conditions import InCondition
+import pandas as pd
+import csv
+from timeit import default_timer as timer
+import importlib
+from pathlib import Path
+
+from sklearn.metrics import accuracy_score, r2_score, precision_score, mean_squared_error,\
+                            recall_score, f1_score, explained_variance_score, roc_auc_score
+from sklearn.model_selection import cross_val_score
+from sklearn.utils.multiclass import type_of_target
+
 from smac.scenario.scenario import Scenario
 from smac.facade.smac_facade import SMAC
-from sklearn.model_selection import cross_val_score
-from timeit import default_timer as timer
-import csv
-import importlib
+
 import os
 current_dir = os.path.abspath(os.path.join(os.path.realpath(__file__), os.pardir))
-from pathlib import Path
+
+from config_space import Config_Space
 
 ITERATION = 0
 
@@ -30,12 +30,7 @@ class JPLSMAC(object):
         self.data = data
         self.target = target
         self.dataset_name = dataset_name
-        self.cs = CS.ConfigurationSpace()
-        self.union_var = []
-        self.union_choice = []
         self.MAX_EVALS = max_evals
-        self.best_params = None
-        self.run_time = None
         Path(current_dir + '/Results').mkdir(exist_ok=True, parents=True)
         self.current_dir = current_dir + '/Results'
 
@@ -46,142 +41,7 @@ class JPLSMAC(object):
         self.sklearn_class = getattr(sklearn_module, self.import_class)
         self.out_file = self.retrieve_path()
 
-    def _enumeration_to_config_space(self, name, hp_value):
-        default_hp = hp_value.get_default()
-        values = hp_value.values
-        params_config = CategoricalHyperparameter(name=name,
-                                                  choices=values,
-                                                  default_value=default_hp)
-        self.cs.add_hyperparameter(params_config)
-        return params_config
-
-    def _constant_to_config_space(self, name, hp_value):
-        default_hp = hp_value.get_default()
-        if default_hp == None:
-            default_hp = str(None)
-        params_config = Constant(name=name, value=default_hp)
-        self.cs.add_hyperparameter(params_config)
-        return params_config
-
-    def _bounded_to_config_space(self, name, hp_value):
-        lower, default_hp = hp_value.lower, hp_value.get_default()
-        if hp_value.upper == None:
-            if default_hp == 0:
-                upper = 10
-            else:
-                upper = 2 * (abs(default_hp))
-        else:
-            upper = hp_value.upper
-        structure_type = hp_value.structural_type
-        # when hyperparameter class is float use UniformFloatHyperparameter
-        if issubclass(structure_type, float):
-            params_config = UniformFloatHyperparameter(name=name,
-                                                       lower=lower, upper=upper,
-                                                       default_value=default_hp)
-
-        # when hyperparameter class is int use UniformIntegerHyperparameter
-        elif issubclass(structure_type, int):
-            params_config = UniformIntegerHyperparameter(name=name,
-                                                         lower=lower, upper=upper,
-                                                         default_value=default_hp)
-
-        self.cs.add_hyperparameter(params_config)
-        return params_config
-
-    def _union_to_config_space(self, name, hp_value):
-        union_child = []
-        union_config = []
-        for union_name, union_hp_value in hp_value.configuration.items():
-            unique_union_name = "{}_{}".format(name, union_name)
-            if isinstance(union_hp_value, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
-                child = self._bounded_to_config_space(unique_union_name, union_hp_value)
-            elif isinstance(union_hp_value, (hyperparams.Enumeration, hyperparams.UniformBool)):
-                child = self._enumeration_to_config_space(unique_union_name, union_hp_value)
-            elif isinstance(union_hp_value, (hyperparams.Constant)):
-                child = self._constant_to_config_space(unique_union_name, union_hp_value)
-            union_child.append(unique_union_name)
-            union_config.append(child)
-
-        # params_config = CategoricalHyperparameter(name=name, choices=union_child, default_value=hp_value.get_default())
-        params_config = CategoricalHyperparameter(name=name, choices=union_child)
-        self.cs.add_hyperparameter(params_config)
-        [self.cs.add_condition(InCondition(child=item, parent=params_config, values=[item.name])) for item in union_config]
-        return params_config
-
-    def _choice_to_config_space(self, name, hp_value):
-        default_hp = (hp_value.get_default().configuration['choice'].get_default())
-        values = list(hp_value.choices.keys())
-        parent_config = CategoricalHyperparameter(name=name,
-                                                  choices=values,
-                                                  default_value=default_hp)
-        self.cs.add_hyperparameter(parent_config)
-
-        choice_dict = collections.defaultdict(list)
-        conditions = []
-        for choice, hyperparameter in hp_value.choices.items():
-            for type, hp_info in hyperparameter.configuration.items():
-                if type != 'choice':
-                    if type in self.cs.get_hyperparameter_names():
-                        # remove the condition from the cs space
-                        for item in conditions:
-                            if item.child.name != type:
-                                continue
-                            else:
-                                choice_dict[type].append(item.value)
-                                conditions.remove(item)
-                        choice_dict[type].append(choice)
-                        continue
-                    elif isinstance(hp_info, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
-                        type_config = self._bounded_to_config_space(type, hp_info)
-                        child_choice = CS.EqualsCondition(type_config, parent_config, choice)
-                    elif isinstance(hp_info, (hyperparams.Constant)):
-                        type_config = self._constant_to_config_space(type, hp_info)
-                        child_choice = CS.EqualsCondition(type_config, parent_config, choice)
-                    elif isinstance(hp_info, (hyperparams.Enumeration)):
-                        type_config = self._enumeration_to_config_space(type, hp_info)
-                        child_choice = CS.EqualsCondition(type_config, parent_config, choice)
-                    elif isinstance(hp_info, (hyperparams.Union)):
-                        type_config = self._union_to_config_space(type, hp_info)
-                        child_choice = CS.EqualsCondition(type_config, parent_config, choice)
-                        self.union_choice.append(type)
-                    conditions.append(child_choice)
-        self.cs.add_conditions(conditions)
-
-        for key, value in choice_dict.items():
-            arg_list = []
-            cs = self.cs.get_hyperparameters()
-            for idx in range(len(cs)):
-                if cs[idx].name == key:
-                    child = cs[idx]
-                else:
-                    continue
-            [arg_list.append(CS.EqualsCondition(child, parent_config, key)) for key in value]
-            or_conj = CS.OrConjunction(*arg_list)
-            self.cs.add_condition(or_conj)
-
-        return parent_config
-
-    def _get_hp_search_space(self):
-        hyperparameters = self.primitive_class.metadata.query()['primitive_code']['hyperparams']
-        configuration = self.primitive_class.metadata.query()['primitive_code']['class_type_arguments']['Hyperparams'].configuration
-        for name, description in hyperparameters.items():
-            hp_value = configuration[name]
-            if description['semantic_types'][0] == 'https://metadata.datadrivendiscovery.org/types/ControlParameter':
-                continue
-            elif isinstance(hp_value, (hyperparams.Enumeration, hyperparams.UniformBool)):
-                params_config = self._enumeration_to_config_space(name, hp_value)
-            elif isinstance(hp_value, (hyperparams.Bounded, hyperparams.Uniform, hyperparams.UniformInt)):
-                params_config = self._bounded_to_config_space(name, hp_value)
-            elif isinstance(hp_value, (hyperparams.Union)):
-                params_config = self._union_to_config_space(name, hp_value)
-                self.union_var.append(name)
-            elif isinstance(hp_value, (hyperparams.Choice)):
-                params_config = self._choice_to_config_space(name, hp_value)
-            elif isinstance(hp_value, (hyperparams.Constant)):
-                params_config = self._constant_to_config_space(name, hp_value)
-        return params_config
-
-    def primitive_from_cfg(self, cfg):
+    def objective(self, cfg):
         """
         Creates a Primitive based on a configuration and evaluates it on the
         given dataset using cross-validation.
@@ -235,7 +95,10 @@ class JPLSMAC(object):
         return cfg
 
     def optimization(self):
-        cs = self._get_hp_search_space()
+        config_space = Config_Space(self.primitive_class)
+        self.cs = config_space.get_hp_search_space()
+        self.union_var = config_space.get_union_var()
+        self.union_choice = config_space.get_union_choice()
         print(self.cs)
 
         # File to save first results
@@ -253,17 +116,17 @@ class JPLSMAC(object):
                              "memory_limit": 100,
                              })
 
-        # def_value = self.primitive_from_cfg(self.cs.get_default_configuration())
+        # def_value = self.objective(self.cs.get_default_configuration())
         # print("Default Value: %.2f" % (def_value))
 
         print("Optimizing! Depending on your machine, this might take a few minutes.")
         start = timer()
-        smac = SMAC(scenario=scenario, rng=np.random.RandomState(42), tae_runner=self.primitive_from_cfg)
+        smac = SMAC(scenario=scenario, rng=np.random.RandomState(42), tae_runner=self.objective)
         incumbent = smac.optimize()
         self.best_params = incumbent
         run_time = timer() - start
         self.run_time = run_time
-        # inc_value = self.primitive_from_cfg(incumbent)
+        # inc_value = self.objective(incumbent)
         #inc_value = smac.get_tae_runner().run(incumbent, 1)[1]
         #validate
         # print("Optimized Value: %.2f" % (inc_value))
@@ -279,7 +142,19 @@ class JPLSMAC(object):
         return self._save_to_folder('/smac_{}_{}'.format(self.import_class, self.dataset_name),
                                     'Hyperparameter_Trials.csv')
 
-    def validate(self, test_data, test_target, pos_label, average):
+    def _classification_scoring(self, test_target, prediction, average_type=None, positive_label=1):
+        accuracy = accuracy_score(test_target, prediction)
+        f1 = f1_score(test_target, prediction, average=average_type, pos_label=positive_label)
+        precision = precision_score(test_target, prediction, average=average_type, pos_label=positive_label)
+        recall = recall_score(test_target, prediction, average=average_type, pos_label=positive_label)
+
+        return {'optimization_technique': 'smac', 'estimator': str(self.primitive_class),
+                'dataset': self.dataset_name, 'accuracy_score': accuracy, 'precision_score': precision,
+                'recall_score': recall, 'f1_score': f1,
+                'max_evals': self.MAX_EVALS, 'total_time': self.run_time,
+                'best_params': self.best_params}
+
+    def validate(self, test_data, test_target):
         cfg = {k: self.best_params[k] for k in self.best_params}
 
         # We translate None values:
@@ -296,27 +171,38 @@ class JPLSMAC(object):
         score = best_model.score(test_data, test_target)
 
         if 'classification' in str(self.primitive_class):
-            f1 = f1_score(test_target, prediction, average=average, pos_label=pos_label)
-            accuracy = accuracy_score(test_target, prediction)
-            precision = precision_score(test_target, prediction, average=average, pos_label=pos_label)
-            recall = recall_score(test_target, prediction, average=average, pos_label=pos_label)
-            # confusion matrix
-            scores_dict = {'optimization_technique': 'smac', 'estimator': str(self.primitive_class), 'dataset': self.dataset_name,
-                           'accuracy_score': accuracy, 'precision_score': precision, 'recall_score': recall,
-                           'f1_score': f1, 'prediction': prediction, 'score': score, 'max_evals': self.MAX_EVALS, 'total_time': self.run_time, 'best_params':cfg}
+            type_target = type_of_target(test_target)
+
+            if type_target == "binary":
+                series_target = pd.Series(test_target)
+                positive_label = series_target.value_counts().index[1]
+                scores_dict = self._classification_scoring(test_target,
+                                                           prediction,
+                                                           average_type='binary',
+                                                           positive_label=positive_label)
+                roc_auc = roc_auc_score(test_target, prediction)
+                scores_dict['roc_auc'] = roc_auc
+                scores_dict['score'] = score
+
+            elif type_target == "multiclass":
+                scores_dict = self._classification_scoring(test_target,
+                                                           prediction,
+                                                           average_type='macro')
+                scores_dict['score'] = score
 
         elif 'regression' in str(self.primitive_class):
             r2 = r2_score(test_target, prediction)
+            mse = mean_squared_error(test_target, prediction)
             explained_variance = explained_variance_score(test_target, prediction)
             scores_dict = {'optimization_technique': 'smac', 'estimator': str(self.primitive_class),
                            'dataset': self.dataset_name, 'r2': r2, 'explained_variance_score': explained_variance,
-                           'score': score, 'max_evals': self.MAX_EVALS, 'total_time': self.run_time, 'best_params':cfg }
+                           'mean_squared_error': mse, 'max_evals': self.MAX_EVALS,
+                           'total_time':self.run_time,'best_params':self.best_params,'score': score}
 
         return scores_dict
 
-            # need to make a utils file with basic things list lower, upper, save to folder, retrieve path
+# need to make a utils file with basic things list lower, upper, save to folder, retrieve path
 # need to now work with the validation code that they have and whatever else
 # need to check the other functions SMAC has
-# fix overlay files, d3m issue, fix hyperparameter type parameters
 # need to fix the default in union, it is wrong bc i am not setting the choices default but configuration wont give it to me, self.default_hyperparameter configuration[default]
 # understand why global iteration wont work
