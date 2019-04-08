@@ -1,18 +1,24 @@
 import numpy as np
-from sklearn.metrics import accuracy_score, r2_score, precision_score, \
-                            recall_score, f1_score, explained_variance_score
-from sklearn.model_selection import cross_val_score
-import d3m.metadata.hyperparams as hyperparams
-from hyperopt import hp, tpe, fmin, Trials
-from hyperopt.pyll import scope
-import importlib
-import os
-current_dir = os.path.abspath(os.path.join(os.path.realpath(__file__), os.pardir))
-from pathlib import Path
+import pandas as pd
 import csv
 import json
+import importlib
+from pathlib import Path
 from timeit import default_timer as timer
+
+from sklearn.metrics import accuracy_score, r2_score, precision_score, mean_squared_error,\
+                            recall_score, f1_score, explained_variance_score, roc_auc_score
+from sklearn.model_selection import cross_val_score
+from sklearn.utils.multiclass import type_of_target
+
+from hyperopt import hp, tpe, fmin, Trials
+from hyperopt.pyll import scope
 from hyperopt import space_eval
+
+import d3m.metadata.hyperparams as hyperparams
+
+import os
+current_dir = os.path.abspath(os.path.join(os.path.realpath(__file__), os.pardir))
 
 ITERATION = 0
 
@@ -190,7 +196,10 @@ class JPLHyperOpt(object):
         # Sort the trials with lowest loss first
         self.save_trials(bayes_trials.results)
         bayes_trials_results = sorted(bayes_trials.results, key=lambda x: x['loss'])
-        self.best_params = space_eval(self.parameters, best)
+
+        best_eval = space_eval(self.parameters, best)
+        self.best_params = self._translate_union_value(self.choice_names, best_eval)
+
         print('The parameters combination that would give best accuracy is : ')
         print(best)
         print('The min loss achieved after parameter tuning via hyperopt is : ', bayes_trials_results[:1][0]['loss'])
@@ -204,24 +213,54 @@ class JPLHyperOpt(object):
     def retrieve_path(self):
         return self._save_to_folder('/hyperopt_{}_{}'.format(self.import_class, self.dataset_name), 'Hyperparameter_Trials.csv')
 
-    def validate(self, test_data, test_target, pos_label, average):
+    def _classification_scoring(self, test_target, prediction, average_type=None, positive_label=1):
+        accuracy = accuracy_score(test_target, prediction)
+        f1 = f1_score(test_target, prediction, average=average_type, pos_label=positive_label)
+        precision = precision_score(test_target, prediction, average=average_type, pos_label=positive_label)
+        recall = recall_score(test_target, prediction, average=average_type, pos_label=positive_label)
+
+        return {'optimization_technique': 'hyperopt', 'estimator': str(self.primitive_class),
+                'dataset': self.dataset_name, 'accuracy_score': accuracy, 'precision_score': precision,
+                'recall_score': recall, 'f1_score': f1,
+                'max_evals': self.MAX_EVALS, 'total_time': self.run_time,
+                'best_params': self.best_params}
+
+
+    def validate(self, test_data, test_target):
         best_model = self.sklearn_class(**self.best_params)
+        print(self.best_params)
         best_model.fit(self.data, self.target)
         prediction = best_model.predict(test_data)
         score = best_model.score(test_data, test_target)
 
         if 'classification' in str(self.primitive_class):
-            f1 = f1_score(test_target, prediction, average=average, pos_label=pos_label)
-            accuracy = accuracy_score(test_target, prediction)
-            precision = precision_score(test_target, prediction, average=average, pos_label=pos_label)
-            recall = recall_score(test_target, prediction, average=average, pos_label=pos_label)
-            #confusion matrix
-            scores_dict = {'optimization_technique': 'hyperopt', 'estimator': str(self.primitive_class), 'dataset': self.dataset_name, 'accuracy_score': accuracy, 'precision_score': precision, 'recall_score': recall, 'f1_score': f1, 'prediction': prediction, 'score': score, 'max_evals': self.MAX_EVALS, 'total_time':self.run_time, 'best_params':self.best_params}
+            type_target = type_of_target(test_target)
+
+            if type_target == "binary":
+                series_target = pd.Series(test_target)
+                positive_label = series_target.value_counts().index[1]
+                scores_dict = self._classification_scoring(test_target,
+                                                           prediction,
+                                                           average_type='binary',
+                                                           positive_label=positive_label)
+                roc_auc = roc_auc_score(test_target, prediction)
+                scores_dict['roc_auc'] = roc_auc
+                scores_dict['score'] = score
+
+            elif type_target == "multiclass":
+                scores_dict = self._classification_scoring(test_target,
+                                                           prediction,
+                                                           average_type='macro')
+                scores_dict['score'] = score
 
         elif 'regression' in str(self.primitive_class):
             r2 = r2_score(test_target, prediction)
+            mse = mean_squared_error(test_target, prediction)
             explained_variance = explained_variance_score(test_target, prediction)
-            scores_dict = {'optimization_technique': 'hyperopt', 'estimator': str(self.primitive_class), 'dataset': self.dataset_name, 'r2': r2, 'explained_variance_score': explained_variance, 'score': score, 'max_evals': self.MAX_EVALS, 'total_time':self.run_time, 'best_params':self.best_params}
+            scores_dict = {'optimization_technique': 'hyperopt', 'estimator': str(self.primitive_class),
+                           'dataset': self.dataset_name, 'r2': r2, 'explained_variance_score': explained_variance,
+                           'mean_squared_error': mse, 'max_evals': self.MAX_EVALS,
+                           'total_time':self.run_time,'best_params':self.best_params,'score': score}
 
         return scores_dict
 
