@@ -133,6 +133,13 @@ class Visual(object):
                 path = self._save_to_folder('/numerical_evolution', '{}_numerical_iter_graph.pdf'.format(item))
                 plt.savefig(path)
 
+    def plot_all(self):
+        self.density_parameters()
+        self.numerical_evolution()
+        self.sort_best_scores()
+        self.categorical_bar_graph()
+        self.categorical_evolution()
+        self.density_loss()
 #
 # visual = Visual('Results/hyperopt_RandomForestClassifier_/Hyperparameter_Trials.csv')
 # visual.density_parameters()
