@@ -1,12 +1,12 @@
 import numpy as np
-from sklearn.datasets import fetch_openml
 from sklearn.model_selection import train_test_split
-from sklearn.impute import SimpleImputer
 from sklearn.utils import shuffle
 from d3m import index
 from SMAC import JPLSMAC
 from BOHB import JPLBOHB
-from GridSearch import JPLGridSearch
+from datasets_id import classification_datasets_id, regression_datasets_id
+from d3m_primitives_list import classification_primitives, regression_primitives
+from Preprocessing import Preprocessing
 from Visual import Visual
 from HyperOpt import JPLHyperOpt
 import logging
@@ -14,44 +14,41 @@ logging.basicConfig(level=logging.INFO)
 import csv
 rng = np.random.RandomState(0)
 import os
+import argparse
 
-#['fertility', version=1, cache=False],['blogger', version=1, cache=False,]['nursery', version=3, cache=False]['parkinsons', version=1, cache=False]
-# all_datasets = [['fertility', 1], ['blogger', 1], ['nursery', 3], ['parkinsons', 1]]
-# all_datasets = [[['eeg-eye-state', 1], 'binary', '1', 'classification'] ]
-all_datasets = [[['fried', 1], 'binary', '1', 'classification'] ]
-# all_primitives = ['d3m.primitives.classification.random_forest.SKlearn', 'd3m.primitives.classification.svc.SKlearn']
-all_primitives = ['d3m.primitives.regression.ard.SKlearn']
-def loop_through():
-    for dataset_arg in all_datasets:
-        imp = SimpleImputer()
-        dataset = fetch_openml(*dataset_arg[0], cache=False)
-        # preprocess = Preprocessing(data_id = )
-        # X_temp, y_temp = preprocess.simple_preprocessing()
-        # X, y = shuffle(X_temp, y_temp, random_state=rng)
-        # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
-        X_temp, y = shuffle(dataset.data, dataset.target, random_state=rng)
-        X = imp.fit_transform(X_temp)
+def loop_through(args):
+    if args.problem_type == 'classification':
+        all_dataset_id = classification_datasets_id
+        all_primitives = classification_primitives
+    elif args.problem_type == 'regression':
+        all_dataset_id = regression_datasets_id
+        all_primitives = regression_primitives
+
+    for data_id in all_dataset_id:
+        preprocess = Preprocessing(data_id = data_id)
+        X_temp, y_temp = preprocess.simple_preprocessing()
+        X, y = shuffle(X_temp, y_temp, random_state=rng)
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
+
         for primitive in all_primitives:
+                print(primitive)
                 primitive_obj = index.get_primitive(primitive)
-                # smac = JPLSMAC(primitive_obj, X_train, y_train, dataset_name=dataset_arg[0][0], max_evals = 10)
+                # smac = JPLSMAC(primitive_obj, X_train, y_train, dataset_name=data_id, max_evals = 2)
                 # smac.optimization()
-                # bohb = JPLBOHB(primitive_obj, X_train, y_train, dataset_name=dataset_arg[0][0], max_evals = 20)
+                # all_visuals(smac)
+                # all_scores(smac, X_test, y_test, args.problem_type)
+                # bohb = JPLBOHB(primitive_obj, X_train, y_train, dataset_name=data_id, max_evals = 2)
                 # bohb.optimization()
                 # all_visuals(smac)
-                # all_scores(smac, X_test, y_test, dataset_arg[3], dataset_arg[2], dataset_arg[1])
-                # grid_search = JPLGridSearch(primitive_obj, X_train, y_train, dataset_name=dataset_arg[0])
-                # grid_search.optimization()
-                # all_visuals(grid_search)
-                # all_scores(grid_search, X_test, y_test)
-                hyperopt = JPLHyperOpt(primitive_obj, X, y, dataset_name=dataset_arg[0][0], max_evals = 10)
+                # all_scores(bohb, X_test, y_test, args.problem_type)
+                hyperopt = JPLHyperOpt(primitive_obj, X_train, y_train, dataset_name=data_id, max_evals = 4)
                 hyperopt.optimization()
                 # all_visuals(hyperopt)
-                # all_scores(hyperopt, X_test, y_test, dataset_arg[3], dataset_arg[2], dataset_arg[1])
+                all_scores(hyperopt, X_test, y_test, args.problem_type)
 
-def all_scores(algo, X_test, y_test, type_of_estimator, pos_label, average):
+def all_scores(algo, X_test, y_test, type_of_estimator):
     outfile = open('Results/{}_scores.csv'.format(type_of_estimator), 'a')
-    scores = algo.validate(X_test, y_test, pos_label, average)
+    scores = algo.validate(X_test, y_test)
     writer = csv.DictWriter(outfile, scores.keys())
     if os.stat('Results/{}_scores.csv'.format(type_of_estimator)).st_size == 0:
         writer.writeheader()
@@ -61,12 +58,7 @@ def all_scores(algo, X_test, y_test, type_of_estimator, pos_label, average):
 def all_visuals(algo):
     path = algo.retrieve_path()
     visual = Visual(path)
-    visual.density_parameters()
-    visual.numerical_evolution()
-    visual.sort_best_scores()
-    visual.categorical_bar_graph()
-    visual.categorical_evolution()
-    visual.density_loss()
+    visual.plot_all()
 
 if __name__ == "__main__":
     """
@@ -76,14 +68,24 @@ if __name__ == "__main__":
      
      - defaults can also be set
     """
-    loop_through()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--problem_type", help="Problem type that is to be run", required=True)
+    args = parser.parse_args()
+    loop_through(args)
 
 # ToDO: Next steps
 # add heat graphs 1) for iteration 2) for most similar
 # compare the validation test scores across all and pick best one
 # some sort choose the best param at 1 hr 2 hr 3hr and by evals
-# add a default validation score
 # add code for metadata datasets
-# pick the datasets that will be used for thesis
-# clean up code in general
-# add spearmint and another hyper techinque and randomsearch
+
+# clean up code
+# figure out how to run 5 random times
+# where to save files
+# make hyperband
+# try and except in hyperband
+# adding time since start
+# add a time to stop and see how stopping is done in hpolib
+# translate hyperopt and bohb
+# fix hypdfopt in validation
+# fix bohb in best_params
