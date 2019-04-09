@@ -1,10 +1,11 @@
 import os
 current_dir = os.path.abspath(os.path.join(os.path.realpath(__file__), os.pardir))
 from pathlib import Path
+
 import pandas as pd
-import numpy as np
 from pandas.api.types import is_float_dtype
 from pandas.api.types import is_integer_dtype
+
 import ast
 import matplotlib
 matplotlib.use('TkAgg')
@@ -136,24 +137,11 @@ class Visual(object):
     def plot_all(self):
         self.density_parameters()
         self.numerical_evolution()
-        self.sort_best_scores()
         self.categorical_bar_graph()
         self.categorical_evolution()
         self.density_loss()
-#
-# visual = Visual('Results/hyperopt_RandomForestClassifier_/Hyperparameter_Trials.csv')
-# visual.density_parameters()
-# visual.numerical_evolution()
-# visual.sort_best_scores()
-# visual.categorical_bar_graph()
-# visual.categorical_evolution()
-# visual.density_loss()
 
 # ToDO:
 # need to make another function for looking at all of the optimization techniques comparisons --> heat map over values
 # need to fix bool options in numerical numerical_evolution and density_parameters
 # need to fix gamma bar graph, count when it picked the auto vs numerical choice in bar graph.
-
-##### THINGs TO DO
-# 1. fix other techniques
-# 2. work on validate function
