@@ -27,12 +27,13 @@ class JPLHyperOpt(object):
     Wrapped HyperOpt
     """
 
-    def __init__(self, primitive_class, data, target, dataset_name='',max_evals=50) -> None:
+    def __init__(self, primitive_class, data, target, dataset_name='',max_evals=50, rerun='') -> None:
         self.primitive_class = primitive_class
         self.data = data
         self.target = target
         self.dataset_name = dataset_name
         self.MAX_EVALS = max_evals
+        self.rerun = rerun
         self.parameters = {}
         self.choice_names = []
         Path(current_dir + '/Results').mkdir(exist_ok=True, parents=True)
@@ -190,7 +191,7 @@ class JPLHyperOpt(object):
         # Optimize
         self.start = timer()
         best = fmin(fn=self.objective, space=self.parameters, algo=tpe.suggest,
-                    max_evals=self.MAX_EVALS, trials=bayes_trials, catch_eval_exceptions = True, rstate = np.random.RandomState(52))
+                    max_evals=self.MAX_EVALS, trials=bayes_trials, catch_eval_exceptions = True)
         self.run_time = timer() - self.start
 
         # Sort the trials with lowest loss first
@@ -211,7 +212,7 @@ class JPLHyperOpt(object):
         return self.best_params
 
     def retrieve_path(self):
-        return self._save_to_folder('/hyperopt_{}_{}'.format(self.import_class, self.dataset_name), 'Hyperparameter_Trials.csv')
+        return self._save_to_folder('/hyperopt_{}_{}'.format(self.import_class, self.dataset_name), 'Hyperparameter_Trials_{}.csv'.format(self.rerun))
 
     def _classification_scoring(self, test_target, prediction, average_type=None, positive_label=1):
         accuracy = accuracy_score(test_target, prediction)
@@ -264,6 +265,6 @@ class JPLHyperOpt(object):
         return scores_dict
 
     def save_trials(self, trials):
-        path = self._save_to_folder('/hyperopt_{}_{}'.format(self.import_class, self.dataset_name), 'Trials.json')
+        path = self._save_to_folder('/hyperopt_{}_{}'.format(self.import_class, self.dataset_name), 'Trials_{}.json'.format(self.rerun))
         with open(path, 'w') as outfile:
             outfile.write(json.dumps(trials))
