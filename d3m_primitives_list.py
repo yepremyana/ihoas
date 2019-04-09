@@ -19,7 +19,7 @@ regression_primitives = [
                                 'd3m.primitives.regression.ridge.SKlearn',
                                 'd3m.primitives.regression.linear_svr.SKlearn',
                                 'd3m.primitives.regression.extra_trees.SKlearn',
-                                'd3m.primitives.regression.gaussian_process.SKlearn',
+                                'd3m.primitives.regression.gradient_boosting.SKlearn',
                                 'd3m.primitives.regression.lars.SKlearn',
                                 'd3m.primitives.regression.lasso.SKlearn',
                                 'd3m.primitives.regression.decision_tree.SKlearn',
