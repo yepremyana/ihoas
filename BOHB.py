@@ -23,12 +23,13 @@ class JPLBOHB(object):
     Wrapped BOHB
     """
 
-    def __init__(self, primitive_class, data, target, dataset_name='',max_evals=50) -> None:
+    def __init__(self, primitive_class, data, target, dataset_name='',max_evals=50, rerun='') -> None:
         self.primitive_class = primitive_class
         self.data = data
         self.target = target
         self.dataset_name = dataset_name
         self.MAX_EVALS = max_evals
+        self.rerun = rerun
         Path(current_dir + '/Results').mkdir(exist_ok=True, parents=True)
         self.current_dir = current_dir + '/Results'
 
@@ -114,7 +115,7 @@ class JPLBOHB(object):
 
     def retrieve_path(self):
         return self._save_to_folder('/bohb_{}_{}'.format(self.import_class, self.dataset_name),
-                                    'Hyperparameter_Trials.csv')
+                                    'Hyperparameter_Trials_{}.csv'.format(self.rerun))
 
     def _classification_scoring(self, test_target, prediction, average_type=None, positive_label=1):
         accuracy = accuracy_score(test_target, prediction)
