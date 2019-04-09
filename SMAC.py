@@ -25,12 +25,13 @@ class JPLSMAC(object):
     Wrapped SMAC
     """
 
-    def __init__(self, primitive_class, data, target, dataset_name='',max_evals=50) -> None:
+    def __init__(self, primitive_class, data, target, dataset_name='',max_evals=50,rerun='') -> None:
         self.primitive_class = primitive_class
         self.data = data
         self.target = target
         self.dataset_name = dataset_name
         self.MAX_EVALS = max_evals
+        self.rerun = rerun
         Path(current_dir + '/Results').mkdir(exist_ok=True, parents=True)
         self.current_dir = current_dir + '/Results'
 
@@ -71,6 +72,7 @@ class JPLSMAC(object):
         start = timer()
         clf = self.sklearn_class(**cfg)
         run_time = timer() - start
+        cum_time = timer() - self.start
 
         scores = cross_val_score(clf, self.data, self.target, cv=5)
         loss = 1 - np.mean(scores)
@@ -79,7 +81,7 @@ class JPLSMAC(object):
         of_connection = open(self.out_file, 'a')
         writer = csv.writer(of_connection)
         reader = csv.reader(read_connection)
-        writer.writerow([loss, cfg, len(list(reader)), run_time])
+        writer.writerow([loss, cfg, len(list(reader)), run_time, cum_time])
 
         return loss # Minimize!
 
@@ -106,32 +108,30 @@ class JPLSMAC(object):
         writer = csv.writer(of_connection)
 
         # Write the headers to the file
-        writer.writerow(['loss', 'params', 'iteration', 'train_time'])
+        writer.writerow(['loss', 'params', 'iteration', 'train_time', 'cum_train_time'])
         of_connection.close()
 
         scenario = Scenario({"run_obj": "quality",  # we optimize quality (alternatively runtime)
                              "runcount-limit": self.MAX_EVALS,  # maximum function evaluations
                              "cs": self.cs,  # configuration space
-                             "deterministic": "false",
-                             "memory_limit": 100,
+                             "deterministic": "false"
                              })
 
         # def_value = self.objective(self.cs.get_default_configuration())
         # print("Default Value: %.2f" % (def_value))
 
         print("Optimizing! Depending on your machine, this might take a few minutes.")
-        start = timer()
-        smac = SMAC(scenario=scenario, rng=np.random.RandomState(42), tae_runner=self.objective)
+        self.start = timer()
+        smac = SMAC(scenario=scenario, tae_runner=self.objective)
         incumbent = smac.optimize()
         self.best_params = incumbent
-        run_time = timer() - start
-        self.run_time = run_time
+        self.run_time = timer() - self.start
         # inc_value = self.objective(incumbent)
         #inc_value = smac.get_tae_runner().run(incumbent, 1)[1]
         #validate
         # print("Optimized Value: %.2f" % (inc_value))
         print('TIME FOR OPTIMIZATION OVER {} EVALS:'.format(self.MAX_EVALS))
-        print(run_time)
+        print(self.run_time)
         return
 
     def _save_to_folder(self, path, savefig):
@@ -140,7 +140,7 @@ class JPLSMAC(object):
 
     def retrieve_path(self):
         return self._save_to_folder('/smac_{}_{}'.format(self.import_class, self.dataset_name),
-                                    'Hyperparameter_Trials.csv')
+                                    'Hyperparameter_Trials_{}.csv'.format(self.rerun))
 
     def _classification_scoring(self, test_target, prediction, average_type=None, positive_label=1):
         accuracy = accuracy_score(test_target, prediction)
@@ -151,8 +151,7 @@ class JPLSMAC(object):
         return {'optimization_technique': 'smac', 'estimator': str(self.primitive_class),
                 'dataset': self.dataset_name, 'accuracy_score': accuracy, 'precision_score': precision,
                 'recall_score': recall, 'f1_score': f1,
-                'max_evals': self.MAX_EVALS, 'total_time': self.run_time,
-                'best_params': self.best_params}
+                'max_evals': self.MAX_EVALS, 'total_time': self.run_time}
 
     def validate(self, test_data, test_target):
         cfg = {k: self.best_params[k] for k in self.best_params}
@@ -181,6 +180,7 @@ class JPLSMAC(object):
                                                            average_type='binary',
                                                            positive_label=positive_label)
                 roc_auc = roc_auc_score(test_target, prediction)
+                scores_dict['best_params'] = cfg
                 scores_dict['roc_auc'] = roc_auc
                 scores_dict['score'] = score
 
@@ -188,6 +188,7 @@ class JPLSMAC(object):
                 scores_dict = self._classification_scoring(test_target,
                                                            prediction,
                                                            average_type='macro')
+                scores_dict['best_params'] = cfg
                 scores_dict['score'] = score
 
         elif 'regression' in str(self.primitive_class):
@@ -197,7 +198,7 @@ class JPLSMAC(object):
             scores_dict = {'optimization_technique': 'smac', 'estimator': str(self.primitive_class),
                            'dataset': self.dataset_name, 'r2': r2, 'explained_variance_score': explained_variance,
                            'mean_squared_error': mse, 'max_evals': self.MAX_EVALS,
-                           'total_time':self.run_time,'best_params':self.best_params,'score': score}
+                           'total_time':self.run_time,'best_params':cfg,'score': score}
 
         return scores_dict
 
@@ -205,4 +206,3 @@ class JPLSMAC(object):
 # need to now work with the validation code that they have and whatever else
 # need to check the other functions SMAC has
 # need to fix the default in union, it is wrong bc i am not setting the choices default but configuration wont give it to me, self.default_hyperparameter configuration[default]
-# understand why global iteration wont work
