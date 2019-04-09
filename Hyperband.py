@@ -23,12 +23,13 @@ class HB(object):
     Wrapped HB
     """
 
-    def __init__(self, primitive_class, data, target, dataset_name='',max_evals=50) -> None:
+    def __init__(self, primitive_class, data, target, dataset_name='',max_evals=50, rerun='') -> None:
         self.primitive_class = primitive_class
         self.data = data
         self.target = target
         self.dataset_name = dataset_name
         self.MAX_EVALS = max_evals
+        self.rerun = rerun
         Path(current_dir + '/Results').mkdir(exist_ok=True, parents=True)
         self.current_dir = current_dir + '/Results'
 
@@ -38,7 +39,7 @@ class HB(object):
         self.import_class = primitive_json.split(".")[-1]
         self.sklearn_class = getattr(sklearn_module, self.import_class)
         self.out_file = self.retrieve_path()
-        self.run_id = 'bohb_{}_{}'.format(self.import_class, self.dataset_name)
+        self.run_id = 'hb_{}_{}'.format(self.import_class, self.dataset_name)
 
     def optimization(self):
         config_space = Config_Space(self.primitive_class)
@@ -50,7 +51,9 @@ class HB(object):
         NS = hpns.NameServer(run_id=self.run_id, host='127.0.0.1', port=None)
         NS.start()
 
-        w = BOHBWorker(sklearn_class=self.sklearn_class, config=self.cs, union_var=self.union_var, union_choice=self.union_choice,data=self.data,target=self.target,nameserver='127.0.0.1', run_id='example1')
+        w = BOHBWorker(sklearn_class=self.sklearn_class, config=self.cs, union_var=self.union_var,
+                       union_choice=self.union_choice,data=self.data,target=self.target,nameserver='127.0.0.1',
+                       run_id=self.run_id)
         w.run(background=True)
 
         hb = HyperBand(configspace=w.get_configspace(),
@@ -114,7 +117,7 @@ class HB(object):
 
     def retrieve_path(self):
         return self._save_to_folder('/hb_{}_{}'.format(self.import_class, self.dataset_name),
-                                    'Hyperparameter_Trials.csv')
+                                    'Hyperparameter_Trials_{}.csv'.format(self.rerun))
 
     def _classification_scoring(self, test_target, prediction, average_type=None, positive_label=1):
         accuracy = accuracy_score(test_target, prediction)
