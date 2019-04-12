@@ -69,11 +69,12 @@ class JPLBOHB(object):
         inc_runs = res.get_runs_by_id(incumbent)
         all_large_runs = res.get_all_runs(only_largest_budget=True)
         all_large_runs = list(filter(lambda r: r.budget== res.HB_config['max_budget'], all_large_runs))
-        all_large_runs.sort(key=lambda r: r.loss)
+        all_large_runs_clean = [run for run in all_large_runs if run.loss]
+        all_large_runs_clean.sort(key=lambda r: r.loss)
         #filter by unique
         seen = set()
         unique = []
-        for item in all_large_runs:
+        for item in all_large_runs_clean:
             if item.config_id[0] not in seen:
                 unique.append(item)
                 seen.add(item.config_id[0])
