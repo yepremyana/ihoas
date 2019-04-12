@@ -38,24 +38,26 @@ def loop_through(args):
             for primitive in all_primitives:
                 print(primitive)
                 primitive_obj = index.get_primitive(primitive)
-                # smac = JPLSMAC(primitive_obj, X_train, y_train, dataset_name=data_id, max_evals = 2)
-                # smac.optimization()
-                # if i == 0:
-                #     all_visuals(smac)
-                # all_scores(smac, X_test, y_test, args.problem_type, rerun = i)
-                # bohb = JPLBOHB(primitive_obj, X_train, y_train, dataset_name=data_id, max_evals = 2)
-                # bohb.optimization()
-                # all_visuals(bohb)
-                # all_scores(bohb, X_test, y_test, args.problem_type, rerun = i)
-                # hb = HB(primitive_obj, X_train, y_train, dataset_name=data_id, max_evals = 2)
-                # hb.optimization()
-                # all_visuals(hb)
-                # all_scores(hb, X_test, y_test, args.problem_type, rerun = i)
-                hyperopt = JPLHyperOpt(primitive_obj, X_train, y_train, dataset_name=data_id, max_evals = 2, rerun = i)
+                smac = JPLSMAC(primitive_obj, X_train, y_train, dataset_name=data_id, max_evals = 600, rerun = i)
+                smac.optimization()
+                if i == 0:
+                    all_visuals(smac)
+                all_scores(smac, X_test, y_test, args.problem_type, rerun = i)
+                bohb = JPLBOHB(primitive_obj, X_train, y_train, dataset_name=data_id, max_evals = 600, rerun = i)
+                bohb.optimization()
+                if i == 0:
+                    all_visuals(bohb)
+                all_scores(bohb, X_test, y_test, args.problem_type, rerun = i)
+                hb = HB(primitive_obj, X_train, y_train, dataset_name=data_id, max_evals = 600, rerun = i)
+                hb.optimization()
+                if i == 0:
+                    all_visuals(hb)
+                all_scores(hb, X_test, y_test, args.problem_type, rerun = i)
+                hyperopt = JPLHyperOpt(primitive_obj, X_train, y_train, dataset_name=data_id, max_evals = 600, rerun = i)
                 hyperopt.optimization()
-                # if i == 0:
-                #     all_visuals(hyperopt)
-                # all_scores(hyperopt, X_test, y_test, args.problem_type, rerun = i)
+                if i == 0:
+                    all_visuals(hyperopt)
+                all_scores(hyperopt, X_test, y_test, args.problem_type, rerun = i)
 
 def all_scores(algo, X_test, y_test, type_of_estimator, rerun):
     outfile = open('Results/{}_scores_{}.csv'.format(type_of_estimator, rerun), 'a')
