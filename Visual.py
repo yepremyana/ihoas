@@ -81,11 +81,14 @@ class Visual(object):
                         # ToDO: enhancement
                         #this is where I could potentially make it so that an additional bar said numerical
                         df_parameters[item].drop(i)
-            plt.figure(figsize=(20, 8))
-            plt.rcParams['font.size'] = 18
-            sns.countplot(x=item, data=df_parameters, palette="husl").set_title('{} bar graph'.format(item))
-            path = self._save_to_folder('/bar_parameters', '{}_bar_graph.pdf'.format(item))
-            plt.savefig(path)
+            try:
+                plt.figure(figsize=(20, 8))
+                plt.rcParams['font.size'] = 18
+                sns.countplot(x=item, data=df_parameters, palette="husl").set_title('{} bar graph'.format(item))
+                path = self._save_to_folder('/bar_parameters', '{}_bar_graph.pdf'.format(item))
+                plt.savefig(path)
+            except:
+                continue
 
     def density_loss(self):
         plt.figure(figsize=(20, 8))
@@ -111,12 +114,14 @@ class Visual(object):
                         continue
                     else:
                         df_parameters[item] = df_parameters[item].drop(i)
-
-            plt.figure(figsize=(20, 8))
-            plt.rcParams['font.size'] = 18
-            sns.catplot(data=df_parameters, x = 'iteration', y = item).fig.suptitle('{} over iterations'.format(item))
-            path = self._save_to_folder('/category_evolution', '{}_category_iter_graph.pdf'.format(item))
-            plt.savefig(path)
+            try:
+                plt.figure(figsize=(20, 8))
+                plt.rcParams['font.size'] = 18
+                sns.catplot(data=df_parameters, x = 'iteration', y = item).fig.suptitle('{} over iterations'.format(item))
+                path = self._save_to_folder('/category_evolution', '{}_category_iter_graph.pdf'.format(item))
+                plt.savefig(path)
+            except:
+                continue
 
     def numerical_evolution(self, params=None):
         df_parameters = self._dataframe_parameters()
