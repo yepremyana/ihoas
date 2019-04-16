@@ -55,6 +55,7 @@ class Visual(object):
                 plt.ylabel('Density')
                 path = self._save_to_folder('/density_parameters','{}_distribution.pdf'.format(item))
                 plt.savefig(path)
+                plt.close('all')
 
             else:
                 continue
@@ -87,6 +88,7 @@ class Visual(object):
                 sns.countplot(x=item, data=df_parameters, palette="husl").set_title('{} bar graph'.format(item))
                 path = self._save_to_folder('/bar_parameters', '{}_bar_graph.pdf'.format(item))
                 plt.savefig(path)
+                plt.close('all')
             except:
                 continue
 
@@ -98,6 +100,7 @@ class Visual(object):
         plt.ylabel('loss')
         path = self._save_to_folder('/loss_graphs', 'loss.pdf')
         plt.savefig(path)
+        plt.close('all')
 
     def categorical_evolution(self, params=None):
         df_parameters = self._dataframe_parameters()
@@ -120,6 +123,7 @@ class Visual(object):
                 sns.catplot(data=df_parameters, x = 'iteration', y = item).fig.suptitle('{} over iterations'.format(item))
                 path = self._save_to_folder('/category_evolution', '{}_category_iter_graph.pdf'.format(item))
                 plt.savefig(path)
+                plt.close('all')
             except:
                 continue
 
@@ -138,6 +142,7 @@ class Visual(object):
                 sns.regplot(data=df_item, x = 'iteration', y = item).set_title('{} over iterations'.format(item))
                 path = self._save_to_folder('/numerical_evolution', '{}_numerical_iter_graph.pdf'.format(item))
                 plt.savefig(path)
+                plt.close('all')
 
     def plot_all(self):
         self.density_parameters()
