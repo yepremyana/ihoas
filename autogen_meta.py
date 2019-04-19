@@ -11,10 +11,14 @@ def loop_through(args):
             all_dataset_id = regression_datasets_id
 
         for data_id in all_dataset_id:
+            print(data_id)
             md = MetaData(data_id)
             metafeature_dict = md.meta_features()
             metafeature_dict['data_id'] = data_id
-            pd.DataFrame(metafeature_dict).to_csv('metafeatures_classification.csv', index=False)
+            filename = 'metafeatures_{}.csv'.format(args.problem_type)
+
+            with open(filename, 'a') as f:
+                pd.DataFrame(metafeature_dict).to_csv(f, mode='a', header=f.tell() == 0, index=False)
 
 if __name__ == "__main__":
     """

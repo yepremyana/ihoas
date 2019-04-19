@@ -150,7 +150,7 @@ class MetaData(object):
     def _only_numerical_col(self):
         #only the keys in the dictionary
         category_names = list(self.dataset.categories.keys())
-        return list(set(category_names).difference(self.dataset.feature_names))
+        return list(set(category_names).symmetric_difference(set(self.dataset.feature_names)))
 
     def _kurtosis(self):
         numerical_c = self._only_numerical_col()
@@ -196,7 +196,7 @@ class MetaData(object):
         if self._skew().empty:
             return np.nan
 
-        return np.nanmean(self._kurtosis().values)
+        return np.nanmean(self._skew().values)
 
     def skew_median(self):
         if self._skew().empty:
