@@ -1,15 +1,15 @@
 classification_primitives = [
-                                'd3m.primitives.classification.mlp.SKlearn',
-                                'd3m.primitives.classification.random_forest.SKlearn',
+                                #'d3m.primitives.classification.mlp.SKlearn',
                                 'd3m.primitives.classification.linear_svc.SKlearn',
-                                'd3m.primitives.classification.extra_trees.SKlearn',
                                 'd3m.primitives.classification.gaussian_naive_bayes.SKlearn',
                                 'd3m.primitives.classification.bernoulli_naive_bayes.SKlearn',
                                 'd3m.primitives.classification.bagging.SKlearn',
                                 'd3m.primitives.classification.gradient_boosting.SKlearn',
-                                'd3m.primitives.classification.decision_tree.SKlearn',
                                 'd3m.primitives.classification.k_neighbors.SKlearn',
-                                'd3m.primitives.classification.svc.SKlearn'
+                                'd3m.primitives.classification.svc.SKlearn',
+                                'd3m.primitives.classification.extra_trees.SKlearn',
+                                'd3m.primitives.classification.random_forest.SKlearn',
+                                'd3m.primitives.classification.decision_tree.SKlearn'
 ]
 
 regression_primitives = [
