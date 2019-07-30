@@ -151,9 +151,11 @@ class JPLHyperOpt(object):
         scores = cross_val_score(clf, self.data, self.target, cv=5)
         loss = 1 - np.mean(scores)
 
+        read_connection = open(self.out_file, 'r')
         of_connection = open(self.out_file, 'a')
         writer = csv.writer(of_connection)
-        writer.writerow([loss, args, ITERATION, run_time, cum_time])
+        reader = csv.reader(read_connection)
+        writer.writerow([loss, args, len(list(reader)), run_time, cum_time])
         of_connection.close()
 
         return loss  # Minimize!
@@ -205,8 +207,7 @@ class JPLHyperOpt(object):
         print(best)
         print('The min loss achieved after parameter tuning via hyperopt is : ', bayes_trials_results[:1][0]['loss'])
         # print(bayes_trials_results[:1][0]['loss'])
-        # ToDO: record stats
-        #make a new with the stats and csv and anything else, then add the figures to the folder.
+
         print('TIME FOR OPTIMIZATION OVER {} EVALS:'.format(self.MAX_EVALS))
         print(self.run_time)
         return self.best_params
