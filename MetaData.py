@@ -229,6 +229,11 @@ class MetaData(object):
         clf = PCA(copy=True).fit(self.X)
         return clf
 
+    def pca_first_second_components(self):
+        # X_std = StandardScaler().fit_transform(self.X)
+        clf = PCA(copy=True).fit(self.X)
+        return clf
+
     def pca_fraction_95(self):
         variance = self._get_pca().explained_variance_ratio_
 
@@ -339,15 +344,13 @@ class MetaData(object):
         self.dataset = preprocess.load_data()
         # self.load_data()
         self.make_df(X_temp, y_temp)
-        # metafeature_dict = {}
-        n_classes = np.nan
-        if self.dataset.details['default_target_attribute'] == 'class':
-            n_classes = self.num_classes()
-            # metafeature_dict['num_classes'] = n_classes
+        # n_classes = np.nan
+        # if self.dataset.details['default_target_attribute'] == 'class':
+        #     n_classes = self.num_classes()
 
         metafeature_dict = {'num_features': self.num_features(),
                             'num_instance': self.num_instance(),
-                            'num_classes': n_classes,
+                            'num_classes': self.num_classes(),
                             'num_categories': self.num_categories(),
                             'num_numeric_features': self.num_numeric_features(),
                             'ratio_categorical_numerical': self.ratio_categorical_numerical(),
